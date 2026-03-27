@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#0a0a1a"/>
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#6c5ce7" stroke-width="12"/>
+  <circle cx="256" cy="256" r="110" fill="none" stroke="#00cec9" stroke-width="8" stroke-dasharray="30 20"/>
+  <text x="256" y="280" text-anchor="middle" font-size="120" fill="#e8e8f0" font-family="sans-serif" font-weight="bold">CV</text>
+</svg>
