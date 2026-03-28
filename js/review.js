@@ -61,7 +61,7 @@ export function render() {
     container.innerHTML = `
         <div class="review-page">
             <div class="page-header">
-                <h1>&#128221; Revisi\u00f3n Semanal</h1>
+                <h1>Revisi\u00f3n Semanal</h1>
                 <span class="text-secondary">${formatDateDisplay(weekStartStr)} - ${formatDateDisplay(weekEndStr)}</span>
             </div>
 
@@ -186,7 +186,7 @@ export function render() {
         }
         store.set('weeklyReviews', allReviews);
         playSound('complete');
-        showToast('&#128221; Revisi\u00f3n guardada. La metacognici\u00f3n fortalece tu corteza prefrontal.');
+        showToast('Revisi\u00f3n guardada. La metacognici\u00f3n fortalece tu corteza prefrontal.');
         render();
     });
 }

@@ -12,7 +12,7 @@ export function render() {
     container.innerHTML = `
         <div class="journal-page">
             <div class="page-header">
-                <h1>&#9997; Diario</h1>
+                <h1>Diario</h1>
                 <div class="date-nav">
                     <button class="btn btn-sm btn-ghost" id="j-prev-day">&larr;</button>
                     <span class="current-date">${formatDateDisplay(selectedDate)} ${selectedDate === today() ? '(Hoy)' : ''}</span>
@@ -217,7 +217,7 @@ function attachListeners(entry, entries) {
         }
         store.set('journal.entries', allEntries);
         playSound('complete');
-        showToast('&#128190; Entrada guardada. Tu cerebro te agradece la reflexi\u00f3n.');
+        showToast('Entrada guardada. Tu cerebro te agradece la reflexi\u00f3n.');
     });
 }
 

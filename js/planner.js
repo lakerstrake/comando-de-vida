@@ -15,7 +15,7 @@ export function render() {
     container.innerHTML = `
         <div class="planner-page">
             <div class="page-header">
-                <h1>&#128197; Planificador</h1>
+                <h1>Planificador</h1>
                 <div class="date-nav">
                     <button class="btn btn-sm btn-ghost" id="prev-day">&larr;</button>
                     <span class="current-date">${formatDateDisplay(selectedDate)} ${selectedDate === today() ? '(Hoy)' : ''}</span>
@@ -254,11 +254,11 @@ function startPomodoro() {
                 const isLongBreak = pomodoroState.sessions % settings.longBreakAfter === 0;
                 pomodoroState.mode = isLongBreak ? 'longBreak' : 'shortBreak';
                 pomodoroState.timeLeft = isLongBreak ? settings.longBreakMinutes * 60 : settings.shortBreakMinutes * 60;
-                showToast(`&#127942; \u00a1Sesi\u00f3n ${pomodoroState.sessions} completada! ${isLongBreak ? 'Toma un descanso largo.' : 'Descanso corto.'}`);
+                showToast(`\u00a1Sesi\u00f3n ${pomodoroState.sessions} completada! ${isLongBreak ? 'Toma un descanso largo.' : 'Descanso corto.'}`);
             } else {
                 pomodoroState.mode = 'work';
                 pomodoroState.timeLeft = settings.workMinutes * 60;
-                showToast('&#128293; \u00a1De vuelta al trabajo! Tu cerebro est\u00e1 recargado.');
+                showToast('\u00a1De vuelta al trabajo! Tu cerebro est\u00e1 recargado.');
             }
             render();
         }

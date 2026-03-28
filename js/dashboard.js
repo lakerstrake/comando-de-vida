@@ -64,7 +64,7 @@ export function render() {
                         </svg>
                         <span class="score-number">${lifeScore}</span>
                     </div>
-                    <h3>Puntuaci\u00f3n de Vida</h3>
+                    <h3 class="card-heading">Puntuaci\u00f3n de Vida</h3>
                     <p class="text-secondary">Basado en h\u00e1bitos, tareas y metas</p>
                 </div>
 

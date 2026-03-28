@@ -26,7 +26,7 @@ export function render() {
     container.innerHTML = `
         <div class="habits-page">
             <div class="page-header">
-                <h1>&#9876; H\u00e1bitos</h1>
+                <h1>H\u00e1bitos</h1>
                 <div class="header-actions">
                     <button class="btn btn-sm btn-ghost" onclick="window.habitsToggleView()">${currentView === 'list' ? '&#9638; Heatmap' : '&#9776; Lista'}</button>
                     <button class="btn btn-primary btn-sm" id="add-habit-btn">+ Nuevo H\u00e1bito</button>
@@ -161,20 +161,20 @@ function toggleHabit(habitId) {
 
         // Variable reward (1 in 5 chance)
         if (Math.random() < 0.2) {
-            showToast('&#10024; \u00a1Bonus! Tu cerebro acaba de liberar dopamina extra.', 'success');
+            showToast('\u00a1Bonus! Tu cerebro acaba de liberar dopamina extra.', 'success');
         }
 
         if (streak === 7) {
             playSound('streak');
-            showToast('&#128293; \u00a17 d\u00edas seguidos! La v\u00eda neuronal se est\u00e1 formando.', 'success');
+            showToast('\u00a17 d\u00edas seguidos! La v\u00eda neuronal se est\u00e1 formando.', 'success');
             createConfetti(document.body);
         } else if (streak === 30) {
             playSound('streak');
-            showToast('&#127942; \u00a130 d\u00edas! Este h\u00e1bito se est\u00e1 volviendo autom\u00e1tico.', 'success');
+            showToast('\u00a130 d\u00edas! Este h\u00e1bito se est\u00e1 volviendo autom\u00e1tico.', 'success');
             createConfetti(document.body);
         } else if (streak === 66) {
             playSound('streak');
-            showToast('&#128142; \u00a166 d\u00edas! Seg\u00fan la ciencia, ya es parte de ti.', 'success');
+            showToast('\u00a166 d\u00edas! Seg\u00fan la ciencia, ya es parte de ti.', 'success');
             createConfetti(document.body);
         } else {
             playSound('complete');

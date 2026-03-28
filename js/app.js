@@ -2,6 +2,8 @@
 import { store } from './store.js';
 import { showToast, showModal, closeModal, escapeHtml } from './ui.js';
 import { aiAssistant } from './ai-assistant.js';
+import { auth } from './auth.js';
+import { loadDefaultTemplates } from './templates.js';
 import * as dashboard from './dashboard.js';
 import * as habits from './habits.js';
 import * as goals from './goals.js';
@@ -87,6 +89,8 @@ function showSettings() {
                     <button type="button" class="btn btn-sm btn-ghost" id="import-btn">&#128194; Importar</button>
                 </div>
             </div>
+            <hr style="border-color:var(--border-glass);margin:16px 0">
+            <button type="button" class="btn btn-sm btn-ghost text-danger" id="logout-btn">Cerrar sesi\u00f3n</button>
         </form>
     `;
 
@@ -134,52 +138,28 @@ function showSettings() {
         });
         input.click();
     });
+
+    document.getElementById('logout-btn')?.addEventListener('click', () => {
+        closeModal();
+        auth.logout();
+    });
 }
 
-// First-time welcome
-function checkFirstTime() {
-    const name = store.get('settings.userName');
-    if (!name) {
-        const html = `
-            <div class="welcome-screen">
-                <h2 style="margin-bottom:8px">Bienvenido a Comando Vida 2.0</h2>
-                <p class="text-secondary" style="margin-bottom:16px">Tu centro de mando personal basado en neurociencia para transformar tu vida.</p>
-                <form id="welcome-form" class="form">
-                    <div class="form-group">
-                        <label>\u00bfC\u00f3mo te llamas?</label>
-                        <input type="text" id="welcome-name" placeholder="Tu nombre" required autofocus>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-block btn-lg">&#128640; Comenzar Transformaci\u00f3n</button>
-                </form>
-                <div style="margin-top:16px">
-                    <p class="text-secondary" style="font-size:0.85rem">
-                        &#129504; Esta app aplica principios de:<br>
-                        &bull; <strong>Neuroplasticidad</strong> - Tu cerebro cambia con cada acci\u00f3n repetida<br>
-                        &bull; <strong>Habit Stacking</strong> - Conecta h\u00e1bitos nuevos a existentes (James Clear)<br>
-                        &bull; <strong>Dopamina</strong> - Sistema de recompensas para mantener motivaci\u00f3n<br>
-                        &bull; <strong>Metacognici\u00f3n</strong> - Revisi\u00f3n semanal para autorregulaci\u00f3n<br>
-                        &bull; <strong>Intenciones de implementaci\u00f3n</strong> - Metas SMART con plan concreto
-                    </p>
-                </div>
-            </div>
-        `;
+// Set up auth callback
+window.__onAuthReady = function(user) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
 
-        showModal('', html);
-        document.getElementById('welcome-form')?.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const name = document.getElementById('welcome-name').value.trim();
-            if (name) {
-                store.set('settings.userName', name);
-                closeModal();
-                showToast(`\u00a1Bienvenido, ${escapeHtml(name)}! Tu transformaci\u00f3n empieza ahora.`);
-                navigate('/dashboard');
-            }
-        });
+    // Load default templates for new users
+    loadDefaultTemplates(store);
+
+    // Update user display in sidebar
+    const userName = user?.name || store.get('settings.userName') || '';
+    if (user?.name && !store.get('settings.userName')) {
+        store.set('settings.userName', user.name);
     }
-}
+    updateUserMenu(user);
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
     // Init all modules
     Object.values(routes).forEach(m => m.init && m.init());
 
@@ -190,7 +170,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // Router
     window.addEventListener('hashchange', handleRoute);
     handleRoute();
+};
 
-    // First time check
-    setTimeout(checkFirstTime, 300);
+function updateUserMenu(user) {
+    const header = document.querySelector('.sidebar-header');
+    if (!header || !user) return;
+    const existing = header.querySelector('.user-menu');
+    if (existing) existing.remove();
+    const initial = (user.name || user.email || 'U')[0].toUpperCase();
+    const menu = document.createElement('div');
+    menu.className = 'user-menu';
+    menu.innerHTML = `
+        <div class="user-avatar">${initial}</div>
+        <div class="user-info">
+            <span class="user-name">${escapeHtml(user.name || user.email || 'Usuario')}</span>
+            <span class="user-method">${user.method === 'guest' ? 'Modo invitado' : user.email || ''}</span>
+        </div>
+    `;
+    header.appendChild(menu);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    auth.init();
 });

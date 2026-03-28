@@ -10,7 +10,7 @@ export function render() {
     container.innerHTML = `
         <div class="lifewheel-page">
             <div class="page-header">
-                <h1>&#9678; Rueda de la Vida</h1>
+                <h1>Rueda de la Vida</h1>
             </div>
 
             <div class="glass-card" style="padding:12px;margin-bottom:16px">
@@ -103,7 +103,7 @@ export function render() {
         }
         store.set('lifeWheel.assessments', all);
         playSound('complete');
-        showToast('&#9678; Evaluaci\u00f3n guardada. Revisa qu\u00e9 \u00e1reas necesitan atenci\u00f3n.');
+        showToast('Evaluaci\u00f3n guardada. Revisa qu\u00e9 \u00e1reas necesitan atenci\u00f3n.');
         render();
     });
 
@@ -206,7 +206,7 @@ function drawRadarChart(scores) {
     }
 
     // Draw labels
-    ctx.fillStyle = '#e8e8f0';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.font = '13px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

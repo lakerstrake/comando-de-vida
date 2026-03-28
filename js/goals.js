@@ -13,7 +13,7 @@ export function render() {
     container.innerHTML = `
         <div class="goals-page">
             <div class="page-header">
-                <h1>&#127919; Metas</h1>
+                <h1>Metas</h1>
                 <div class="header-actions">
                     <button class="btn btn-sm btn-ghost" onclick="window.goalsToggleView()">${currentView === 'list' ? '&#9638; Vision Board' : '&#9776; Lista'}</button>
                     <button class="btn btn-primary btn-sm" id="add-goal-btn">+ Nueva Meta</button>
@@ -217,7 +217,7 @@ function showAddGoalForm() {
         goals.push(goal);
         store.set('goals.items', goals);
         closeModal();
-        showToast('&#127919; \u00a1Meta creada! Tu SAR ya est\u00e1 buscando oportunidades.');
+        showToast('\u00a1Meta creada! Tu SAR ya est\u00e1 buscando oportunidades.');
         playSound('complete');
         render();
     });
@@ -279,7 +279,7 @@ function showGoalDetail(goalId) {
             goal.progress = parseInt(e.target.value);
             store.set('goals.items', goals);
             if (goal.progress === 100) {
-                showToast('&#127881; \u00a1Meta al 100%! \u00bfLa marcas como completada?');
+                showToast('\u00a1Meta al 100%! \u00bfLa marcas como completada?');
             }
         });
     }
@@ -309,7 +309,7 @@ function showGoalDetail(goalId) {
         goal.progress = 100;
         store.set('goals.items', goals);
         closeModal();
-        showToast('&#127942; \u00a1Meta completada! Tu cerebro acaba de recibir una gran dosis de dopamina.');
+        showToast('\u00a1Meta completada! Tu cerebro acaba de recibir una gran dosis de dopamina.');
         playSound('streak');
         render();
     });

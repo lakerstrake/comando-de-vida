@@ -64,9 +64,24 @@ class Store {
     _save() {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(this._data));
+            this._showAutosave();
         } catch (e) {
             console.error('Store save error:', e);
         }
+    }
+
+    _showAutosave() {
+        let indicator = document.getElementById('autosave-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'autosave-indicator';
+            indicator.className = 'autosave-indicator';
+            indicator.textContent = 'Guardado';
+            document.body.appendChild(indicator);
+        }
+        indicator.classList.add('show');
+        clearTimeout(this._autosaveTimeout);
+        this._autosaveTimeout = setTimeout(() => indicator.classList.remove('show'), 1500);
     }
 
     get(path) {

@@ -213,7 +213,8 @@ INSTRUCCIONES ESTRICTAS:
 - Usa emojis estrat\u00E9gicamente (1-2 por respuesta)
 - Proporciona consejos accionables basados en neurociencia
 - Considera h\u00E1bitos, metas, tareas, rachas y \u00E1nimo en tu respuesta
-- Si no tiene datos, ay\u00FAdalo a empezar`;
+- Si no tiene datos, ay\u00FAdalo a empezar
+- Siempre ofrece sugerencias concretas y accionables. Menciona funciones espec\u00EDficas de la app (como el planificador, diario, rueda de vida, revisi\u00F3n semanal). Usa datos reales del usuario cuando est\u00E9n disponibles.`;
     }
 
     // --- Gemini API ---
@@ -494,6 +495,9 @@ Entradas de diario: ${s.journalEntries}`;
             motivation: ['motivaci\u00F3n', 'animar', 'inspiraci\u00F3n', 'fuerza', '\u00E1nimo', 'deprimido', 'cansado', 'no puedo', 'dif\u00EDcil', 'rendirme'],
             habits: ['h\u00E1bito', 'rutina', 'diario', 'consistencia', 'regularidad', 'disciplina', 'racha', 'streak'],
             focus: ['enfoque', 'concentraci\u00F3n', 'distra\u00EDdo', 'disperso', 'focus', 'atenci\u00F3n', 'pomodoro'],
+            planning: ['planificar', 'organizar', 'priorizar', 'agenda', 'tiempo', 'productividad', 'eisenhower', 'pomodoro'],
+            learning: ['aprender', 'estudiar', 'leer', 'libro', 'curso', 'conocimiento', 'crecer'],
+            wellness: ['bienestar', 'equilibrio', 'balance', 'vida', 'salud mental', 'autocuidado', 'descanso'],
             stress: ['estr\u00E9s', 'ansiedad', 'presi\u00F3n', 'agobiado', 'saturado', 'ansied', 'nervio', 'angustia', 'calma'],
             goals: ['meta', 'objetivo', 'prop\u00F3sito', 'lograr', 'alcanzar', 'conseguir', 'sue\u00F1o', 'plan'],
             mood: ['\u00E1nimo', 'sentir', 'emoci\u00F3n', 'humor', 'triste', 'feliz', 'contento', 'mal'],
@@ -544,6 +548,27 @@ Entradas de diario: ${s.journalEntries}`;
                 `\u{1F3AF} Tu cerebro necesita ~23 min para recuperar el enfoque tras una interrupci\u00F3n. Soluci\u00F3n: silencia el tel\u00E9fono, cierra pesta\u00F1as innecesarias y usa Pomodoro (25 min trabajo + 5 descanso).`,
                 `\u{1F3AF} El enfoque es un m\u00FAsculo que se entrena. ${s.pendingTasks > 0 ? `Elige UNA de tus ${s.pendingTasks} tareas y dale 25 minutos de atenci\u00F3n total.` : 'Elige una tarea clara y d\u00E9dicale 25 min sin distracciones.'}`,
                 `\u{1F3AF} T\u00E9cnica probada: antes de trabajar, escribe en papel las 3 cosas que har\u00E1s. Tu corteza prefrontal se activa mejor con objetivos claros.`
+            ],
+            planning: [
+                s.completedTasks > 0
+                    ? `\u{1F4CB} Ya completaste ${s.completedTasks} tarea(s) y tienes ${s.pendingTasks} pendiente(s). Usa la Matriz de Eisenhower en el planificador para clasificar por urgencia e importancia. Enfoca tu energ\u00EDa en lo importante, no solo lo urgente.`
+                    : `\u{1F4CB} Empieza organizando tus tareas con la Matriz de Eisenhower: clasifica cada tarea como urgente/importante. Lo importante pero no urgente (Q2) es donde ocurre el crecimiento real.`,
+                `\u{1F4CB} T\u00E9cnica Pomodoro: trabaja 25 min enfocado, descansa 5. ${s.pendingTasks > 3 ? `Con ${s.pendingTasks} tareas pendientes, prioriza las 3 m\u00E1s importantes y usa el planificador para asignarles tiempo espec\u00EDfico.` : 'Abre el planificador y asigna bloques de tiempo a cada tarea.'}`,
+                `\u{1F4CB} La clave de la organizaci\u00F3n es la revisi\u00F3n semanal. ${s.weeklyReviews > 0 ? `Ya llevas ${s.weeklyReviews} revisiones semanales, eso fortalece tu autorregulaci\u00F3n.` : 'Prueba la secci\u00F3n de Revisi\u00F3n Semanal para evaluar y ajustar tu rumbo.'}`
+            ],
+            learning: [
+                s.activeGoals > 0
+                    ? `\u{1F4DA} Tienes ${s.activeGoals} meta(s) activa(s). Conecta tu aprendizaje con tus metas: cada libro, curso o habilidad nueva debe acercarte a un objetivo concreto. Registra tus lecturas como h\u00E1bito para ser consistente.`
+                    : `\u{1F4DA} El aprendizaje continuo es clave para el crecimiento personal. Crea una meta en la app para lo que quieres aprender y a\u00F1ade "leer 15 min" como h\u00E1bito diario. La neuroplasticidad muestra que aprender algo nuevo cada d\u00EDa fortalece conexiones neuronales.`,
+                `\u{1F4DA} La t\u00E9cnica de repetici\u00F3n espaciada es la forma m\u00E1s efectiva de retener conocimiento. Anota en tu diario lo que aprendes cada d\u00EDa y rev\u00EDsalo en tu revisi\u00F3n semanal.`,
+                `\u{1F4DA} Consejo: no solo consumas informaci\u00F3n, apl\u00EDcala. ${s.journalEntries > 0 ? `Usa tu diario (ya tienes ${s.journalEntries} entradas) para reflexionar sobre lo aprendido.` : 'Empieza a usar el diario para registrar lecciones aprendidas cada d\u00EDa.'}`
+            ],
+            wellness: [
+                s.lifeWheelAssessments > 0
+                    ? `\u{2696}\u{FE0F} Ya tienes ${s.lifeWheelAssessments} evaluaci\u00F3n(es) en tu Rueda de la Vida. Rev\u00EDsala para identificar qu\u00E9 \u00E1reas necesitan m\u00E1s atenci\u00F3n. El equilibrio entre \u00E1reas reduce el cortisol y mejora tu bienestar general.`
+                    : `\u{2696}\u{FE0F} El bienestar integral requiere equilibrio. Haz una evaluaci\u00F3n en la Rueda de la Vida para visualizar qu\u00E9 \u00E1reas est\u00E1n fuertes y cu\u00E1les necesitan atenci\u00F3n. Una vida desequilibrada genera estr\u00E9s cr\u00F3nico.`,
+                `\u{2696}\u{FE0F} Los 4 pilares del bienestar seg\u00FAn la neurociencia: sue\u00F1o de calidad, ejercicio regular, conexiones sociales y prop\u00F3sito. ${s.avgMood ? `Tu \u00E1nimo promedio es ${s.avgMood}/5. ${parseFloat(s.avgMood) >= 3.5 ? 'Vas por buen camino.' : 'Enfocarte en estos pilares puede ayudarte a mejorar.'}` : 'Registra tu \u00E1nimo en el diario para hacer seguimiento.'}`,
+                `\u{2696}\u{FE0F} El autocuidado no es ego\u00EDsmo, es necesidad. Tu cerebro necesita descanso para consolidar aprendizajes y h\u00E1bitos. ${s.weeklyRate >= 80 ? 'Tu consistencia es alta, aseg\u00FArate de incluir descanso activo.' : 'Empieza con peque\u00F1os momentos de pausa: 5 min de respiraci\u00F3n consciente entre tareas.'}`
             ],
             stress: [
                 `\u{1F9D8} Respira con la t\u00E9cnica 4-7-8: inhala 4 seg, mant\u00E9n 7 seg, exhala 8 seg. Repite 3 veces. Esto activa tu sistema parasimptico y reduce el cortisol r\u00E1pidamente.`,
