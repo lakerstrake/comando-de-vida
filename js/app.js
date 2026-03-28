@@ -1,6 +1,6 @@
 // app.js - Main application entry point and router
 import { store } from './store.js';
-import { showToast, showModal, closeModal } from './ui.js';
+import { showToast, showModal, closeModal, escapeHtml } from './ui.js';
 import { aiAssistant } from './ai-assistant.js';
 import * as dashboard from './dashboard.js';
 import * as habits from './habits.js';
@@ -66,7 +66,7 @@ function showSettings() {
         <form id="settings-form" class="form">
             <div class="form-group">
                 <label>Tu nombre</label>
-                <input type="text" id="set-name" value="${settings.userName || ''}" placeholder="Guerrero">
+                <input type="text" id="set-name" value="${escapeHtml(settings.userName || '')}" placeholder="Guerrero">
             </div>
             <div class="form-group">
                 <label><input type="checkbox" id="set-sound" ${settings.soundEnabled ? 'checked' : ''}> Sonidos activados</label>
@@ -79,7 +79,7 @@ function showSettings() {
                 <small class="text-secondary">${usage.kb} KB / 5 MB (${usage.percentage}%)</small>
             </div>
             <button type="submit" class="btn btn-primary btn-block">Guardar</button>
-            <hr style="border-color:rgba(255,255,255,0.1);margin:16px 0">
+            <hr style="border-color:var(--border-glass);margin:16px 0">
             <div class="form-group">
                 <label>Datos</label>
                 <div style="display:flex;gap:8px">
@@ -171,7 +171,7 @@ function checkFirstTime() {
             if (name) {
                 store.set('settings.userName', name);
                 closeModal();
-                showToast(`\u00a1Bienvenido, ${name}! Tu transformaci\u00f3n empieza ahora.`);
+                showToast(`\u00a1Bienvenido, ${escapeHtml(name)}! Tu transformaci\u00f3n empieza ahora.`);
                 navigate('/dashboard');
             }
         });

@@ -45,7 +45,7 @@ export function render() {
             <div class="dashboard-header">
                 <div>
                     <h1>${greeting}, ${userName}</h1>
-                    <p class="text-secondary">${formatDateDisplay(todayStr)} ${isFreshStart ? '&#10024; Nuevo comienzo - aprovecha el impulso' : ''}</p>
+                    <p class="text-secondary">${formatDateDisplay(todayStr)}${isFreshStart ? ' &mdash; Nuevo ciclo, nueva oportunidad' : ''}</p>
                 </div>
             </div>
 
@@ -57,7 +57,7 @@ export function render() {
                 <div class="glass-card score-card">
                     <div class="score-circle">
                         <svg viewBox="0 0 120 120">
-                            <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="8"/>
+                            <circle cx="60" cy="60" r="54" fill="none" stroke="var(--bg-tertiary)" stroke-width="8"/>
                             <circle cx="60" cy="60" r="54" fill="none" stroke="var(--accent-primary)" stroke-width="8"
                                 stroke-dasharray="${339.3}" stroke-dashoffset="${339.3 * (1 - lifeScore / 100)}"
                                 stroke-linecap="round" transform="rotate(-90 60 60)"/>
@@ -69,18 +69,18 @@ export function render() {
                 </div>
 
                 <div class="glass-card">
-                    <h3>&#9876; H\u00e1bitos Hoy</h3>
+                    <h3 class="card-heading">H\u00e1bitos Hoy</h3>
                     <div class="progress-stat">
                         <div class="progress-bar">
                             <div class="progress-fill" style="width: ${activeHabits.length ? (habitsDone / activeHabits.length) * 100 : 0}%"></div>
                         </div>
                         <span class="stat-number">${habitsDone}/${activeHabits.length}</span>
                     </div>
-                    <a href="#/habits" class="card-link">Completar h\u00e1bitos &rarr;</a>
+                    <a href="#/habits" class="card-link">Ver h\u00e1bitos &rarr;</a>
                 </div>
 
                 <div class="glass-card">
-                    <h3>&#9745; Tareas Hoy</h3>
+                    <h3 class="card-heading">Tareas Hoy</h3>
                     <div class="progress-stat">
                         <div class="progress-bar">
                             <div class="progress-fill progress-fill-teal" style="width: ${todayTasks.length ? (completedTasks.length / todayTasks.length) * 100 : 0}%"></div>
@@ -91,7 +91,7 @@ export function render() {
                 </div>
 
                 <div class="glass-card">
-                    <h3>&#127919; Metas Activas</h3>
+                    <h3 class="card-heading">Metas Activas</h3>
                     <div class="goals-summary">
                         <span class="big-number">${activeGoals.length}</span>
                         <span class="text-secondary">Progreso promedio: ${Math.round(goalProgress)}%</span>
@@ -102,7 +102,7 @@ export function render() {
 
             ${streaks.length ? `
             <div class="glass-card streaks-card">
-                <h3>&#128293; Rachas Activas</h3>
+                <h3 class="card-heading">Rachas Activas</h3>
                 <div class="streaks-list">
                     ${streaks.map(s => `
                         <div class="streak-item">
@@ -116,19 +116,35 @@ export function render() {
 
             <div class="dashboard-actions">
                 <a href="#/habits" class="action-btn glass-card">
-                    <span class="action-icon">&#9745;</span>
-                    <span>Registrar H\u00e1bito</span>
+                    <span class="action-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    </span>
+                    <span>H\u00e1bitos</span>
                 </a>
                 <a href="#/planner" class="action-btn glass-card">
-                    <span class="action-icon">&#9200;</span>
+                    <span class="action-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </span>
                     <span>Pomodoro</span>
                 </a>
                 <a href="#/journal" class="action-btn glass-card">
-                    <span class="action-icon">&#9997;</span>
-                    <span>Escribir Diario</span>
+                    <span class="action-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                        </svg>
+                    </span>
+                    <span>Diario</span>
                 </a>
                 <a href="#/lifewheel" class="action-btn glass-card">
-                    <span class="action-icon">&#9678;</span>
+                    <span class="action-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
+                        </svg>
+                    </span>
                     <span>Rueda de Vida</span>
                 </a>
             </div>

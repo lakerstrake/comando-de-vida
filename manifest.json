@@ -1,25 +1,26 @@
 {
     "name": "Comando Vida 2.0",
-    "short_name": "ComandoVida",
-    "description": "Tu centro de mando personal basado en neurociencia para transformar tu vida",
-    "start_url": "./index.html",
+    "short_name": "Comando Vida",
+    "description": "Centro de mando personal para transformación de vida basado en neurociencia",
+    "start_url": "./",
+    "scope": "./",
     "display": "standalone",
-    "background_color": "#0a0a1a",
-    "theme_color": "#6c5ce7",
     "orientation": "any",
+    "background_color": "#0f172a",
+    "theme_color": "#0f172a",
+    "categories": ["lifestyle", "productivity", "health"],
     "icons": [
         {
             "src": "assets/icons/icon-192.svg",
             "sizes": "192x192",
             "type": "image/svg+xml",
-            "purpose": "any maskable"
+            "purpose": "any"
         },
         {
             "src": "assets/icons/icon-512.svg",
             "sizes": "512x512",
             "type": "image/svg+xml",
-            "purpose": "any maskable"
+            "purpose": "any"
         }
-    ],
-    "categories": ["lifestyle", "productivity", "health"]
+    ]
 }

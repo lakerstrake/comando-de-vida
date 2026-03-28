@@ -150,13 +150,13 @@ function drawRadarChart(scores) {
             i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)';
         ctx.lineWidth = 1;
         ctx.stroke();
 
         // Level number
         const labelAngle = -Math.PI / 2;
-        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.font = '10px sans-serif';
         ctx.fillText(level, cx + r * Math.cos(labelAngle) + 4, cy + r * Math.sin(labelAngle) + 4);
     }
@@ -167,7 +167,7 @@ function drawRadarChart(scores) {
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
         ctx.lineWidth = 1;
         ctx.stroke();
     }

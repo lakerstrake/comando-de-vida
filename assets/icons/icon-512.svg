@@ -1,6 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="80" fill="#0a0a1a"/>
-  <circle cx="256" cy="256" r="160" fill="none" stroke="#6c5ce7" stroke-width="12"/>
-  <circle cx="256" cy="256" r="110" fill="none" stroke="#00cec9" stroke-width="8" stroke-dasharray="30 20"/>
-  <text x="256" y="280" text-anchor="middle" font-size="120" fill="#e8e8f0" font-family="sans-serif" font-weight="bold">CV</text>
+  <defs>
+    <linearGradient id="layerGrad1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="layerGrad2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="layerGrad3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="102" fill="#0f172a"/>
+  <!-- Bottom layer (largest) -->
+  <rect x="117" y="235" width="278" height="170" rx="26" fill="url(#layerGrad3)" opacity="0.55"/>
+  <!-- Middle layer -->
+  <rect x="139" y="181" width="234" height="170" rx="26" fill="url(#layerGrad2)" opacity="0.75"/>
+  <!-- Top layer (smallest, most prominent) -->
+  <rect x="160" y="128" width="192" height="170" rx="26" fill="url(#layerGrad1)"/>
+  <!-- Upward arrow / chevron on top layer -->
+  <polyline points="219,234 256,192 293,234" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

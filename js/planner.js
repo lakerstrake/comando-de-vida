@@ -193,7 +193,7 @@ function renderPomodoroView(settings) {
             </div>
             <div class="pomo-timer">
                 <svg viewBox="0 0 300 300" class="pomo-circle">
-                    <circle cx="150" cy="150" r="140" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
+                    <circle cx="150" cy="150" r="140" fill="none" stroke="var(--bg-tertiary)" stroke-width="10"/>
                     <circle cx="150" cy="150" r="140" fill="none"
                         stroke="${pomodoroState.mode === 'work' ? 'var(--accent-primary)' : 'var(--accent-success)'}"
                         stroke-width="10" stroke-linecap="round"

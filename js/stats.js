@@ -94,7 +94,7 @@ function drawLineChart(ctx, w, h, dates, values, color, label, maxVal = null) {
     const max = maxVal || Math.max(...values, 1);
 
     // Grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.06)';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
         const y = padding.top + (chartH / 4) * i;
@@ -102,14 +102,14 @@ function drawLineChart(ctx, w, h, dates, values, color, label, maxVal = null) {
         ctx.moveTo(padding.left, y);
         ctx.lineTo(w - padding.right, y);
         ctx.stroke();
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
         ctx.font = '10px sans-serif';
         ctx.textAlign = 'right';
         ctx.fillText(Math.round(max - (max / 4) * i), padding.left - 5, y + 4);
     }
 
     // X labels
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'center';
     const step = Math.max(1, Math.floor(dates.length / 7));
@@ -171,13 +171,13 @@ function drawBarChart(ctx, w, h, labels, values, colors) {
         ctx.fill();
 
         // Value
-        ctx.fillStyle = '#e8e8f0';
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
         ctx.font = '11px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(v, x + barWidth / 2, y - 5);
 
         // Label
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.font = '10px sans-serif';
         ctx.save();
         ctx.translate(x + barWidth / 2, h - 5);
@@ -239,10 +239,10 @@ function drawStreaksChart() {
     })).sort((a, b) => b.streak - a.streak).slice(0, 8);
 
     if (!streakData.length) {
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
         ctx.font = '14px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('No hay rachas a\u00fan', w / 2, h / 2);
+        ctx.fillText('No hay rachas aún', w / 2, h / 2);
         return;
     }
 

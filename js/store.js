@@ -112,6 +112,35 @@ class Store {
     importData(jsonString) {
         try {
             const data = JSON.parse(jsonString);
+
+            // Validate that parsed data is a non-null object (not array, not primitive)
+            if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+                console.error('Import error: data is not a valid object');
+                return false;
+            }
+
+            // Validate that it contains at least one known top-level key
+            const knownKeys = ['habits', 'goals', 'planner', 'journal', 'lifeWheel', 'settings', 'weeklyReviews', 'stats', 'version'];
+            const hasKnownKey = Object.keys(data).some(key => knownKeys.includes(key));
+            if (!hasKnownKey) {
+                console.error('Import error: data does not contain any recognized keys');
+                return false;
+            }
+
+            // Validate structure of known keys if they exist
+            if (data.habits !== undefined && (typeof data.habits !== 'object' || data.habits === null)) {
+                console.error('Import error: habits has invalid structure');
+                return false;
+            }
+            if (data.settings !== undefined && (typeof data.settings !== 'object' || data.settings === null)) {
+                console.error('Import error: settings has invalid structure');
+                return false;
+            }
+            if (data.goals !== undefined && (typeof data.goals !== 'object' || data.goals === null)) {
+                console.error('Import error: goals has invalid structure');
+                return false;
+            }
+
             this._data = data;
             this._save();
             return true;
