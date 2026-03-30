@@ -12,6 +12,7 @@ import * as journal from './journal.js';
 import * as lifewheel from './lifewheel.js';
 import * as stats from './stats.js';
 import * as review from './review.js';
+import * as profile from './profile.js';
 
 const routes = {
     '/dashboard': dashboard,
@@ -21,7 +22,8 @@ const routes = {
     '/journal': journal,
     '/lifewheel': lifewheel,
     '/stats': stats,
-    '/review': review
+    '/review': review,
+    '/profile': profile
 };
 
 let currentModule = null;
