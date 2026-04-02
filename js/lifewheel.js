@@ -2,6 +2,35 @@
 import { store } from './store.js';
 import { generateId, today, formatDateDisplay, showToast, playSound, LIFE_AREAS } from './ui.js';
 
+function wheelPalette() {
+    const style = getComputedStyle(document.documentElement);
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const accent = style.getPropertyValue('--accent-primary').trim() || '#4f46e5';
+
+    const hex = accent.startsWith('#') ? accent.slice(1) : '';
+    let accentRgba = 'rgba(79, 70, 229, 0.28)';
+    if (hex) {
+        const fullHex = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+        const intValue = Number.parseInt(fullHex, 16);
+        if (!Number.isNaN(intValue)) {
+            const r = (intValue >> 16) & 255;
+            const g = (intValue >> 8) & 255;
+            const b = intValue & 255;
+            accentRgba = `rgba(${r}, ${g}, ${b}, ${isDark ? 0.34 : 0.22})`;
+        }
+    }
+
+    return {
+        grid: isDark ? 'rgba(180, 200, 235, 0.22)' : 'rgba(40, 56, 90, 0.12)',
+        axis: isDark ? 'rgba(180, 200, 235, 0.32)' : 'rgba(40, 56, 90, 0.18)',
+        label: isDark ? 'rgba(230, 241, 255, 0.9)' : 'rgba(26, 42, 75, 0.82)',
+        level: isDark ? 'rgba(181, 203, 238, 0.78)' : 'rgba(34, 51, 84, 0.62)',
+        stroke: accent,
+        fill: accentRgba,
+        pointStroke: isDark ? '#0b1424' : '#ffffff'
+    };
+}
+
 export function render() {
     const container = document.getElementById('main-content');
     const assessments = store.get('lifeWheel.assessments') || [];
@@ -136,6 +165,7 @@ function drawRadarChart(scores) {
     const labels = Object.values(LIFE_AREAS);
     const n = areas.length;
     const angleStep = (2 * Math.PI) / n;
+    const palette = wheelPalette();
 
     ctx.clearRect(0, 0, size, size);
 
@@ -150,13 +180,13 @@ function drawRadarChart(scores) {
             i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+        ctx.strokeStyle = palette.grid;
         ctx.lineWidth = 1;
         ctx.stroke();
 
         // Level number
         const labelAngle = -Math.PI / 2;
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillStyle = palette.level;
         ctx.font = '10px sans-serif';
         ctx.fillText(level, cx + r * Math.cos(labelAngle) + 4, cy + r * Math.sin(labelAngle) + 4);
     }
@@ -167,7 +197,7 @@ function drawRadarChart(scores) {
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
-        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+        ctx.strokeStyle = palette.axis;
         ctx.lineWidth = 1;
         ctx.stroke();
     }
@@ -183,9 +213,9 @@ function drawRadarChart(scores) {
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(108, 92, 231, 0.3)';
+    ctx.fillStyle = palette.fill;
     ctx.fill();
-    ctx.strokeStyle = '#6c5ce7';
+    ctx.strokeStyle = palette.stroke;
     ctx.lineWidth = 2.5;
     ctx.stroke();
 
@@ -200,13 +230,13 @@ function drawRadarChart(scores) {
         ctx.arc(x, y, 5, 0, Math.PI * 2);
         ctx.fillStyle = val >= 7 ? '#00cec9' : val >= 4 ? '#fdcb6e' : '#ff6b6b';
         ctx.fill();
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = palette.pointStroke;
         ctx.lineWidth = 1.5;
         ctx.stroke();
     }
 
     // Draw labels
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillStyle = palette.label;
     ctx.font = '13px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

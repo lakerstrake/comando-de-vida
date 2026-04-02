@@ -8,6 +8,29 @@ export function escapeHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
+const ICONS = {
+    bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+    flame: '<path d="M12 3c2.5 3 4 4.9 4 7.5a4 4 0 1 1-8 0C8 8.2 9.4 6.5 12 3z"/><path d="M12 10.5c1.2 1.2 1.8 2.2 1.8 3.2a1.8 1.8 0 1 1-3.6 0c0-1 .6-2 1.8-3.2z"/>',
+    shield: '<path d="M12 3l7 3v6c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6l7-3z"/>',
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    sparkle: '<path d="M12 3l1.6 3.4L17 8l-3.4 1.6L12 13l-1.6-3.4L7 8l3.4-1.6L12 3z"/><path d="M5 15l.8 1.7L7.5 17l-1.7.8L5 19.5l-.8-1.7L2.5 17l1.7-.8L5 15z"/><path d="M19 14l.9 1.9L22 17l-2.1 1.1L19 20l-.9-1.9L16 17l2.1-1.1L19 14z"/>',
+    moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7.1 7.1 0 0 0 9.8 9.8z"/>',
+    lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.8"/>',
+    arrowRight: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/>',
+    categoryHealth: '<path d="M12 20s-7-4.2-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.8-7 9-7 9z"/>',
+    categoryMind: '<circle cx="12" cy="12" r="8"/><path d="M9.5 10.5h5M9.5 13.5h5"/>',
+    categorySocial: '<circle cx="8" cy="9" r="2"/><circle cx="16" cy="9" r="2"/><path d="M4.8 16a3.2 3.2 0 0 1 3.2-3.2h8A3.2 3.2 0 0 1 19.2 16"/>',
+    categoryFinance: '<rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 12h8"/><circle cx="12" cy="12" r="2.2"/>',
+    categoryCareer: '<path d="M3 8h18v11H3z"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/>',
+    categorySpiritual: '<path d="M12 3l2.4 4.8L20 10l-4 3.6L17 20l-5-2.8L7 20l1-6.4L4 10l5.6-2.2L12 3z"/>'
+};
+
+export function icon(name, size = 14, className = '') {
+    const paths = ICONS[name] || ICONS.sparkle;
+    return `<svg class="${className}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
 export function formatDate(date) {
     if (typeof date === 'string') date = new Date(date);
     return date.toISOString().split('T')[0];
@@ -53,6 +76,9 @@ export function showModal(title, content, actions = []) {
             `<button class="btn btn-${a.type || 'secondary'}" id="modal-action-${a.id}">${a.label}</button>`
         ).join('')}</div>` : ''}
     `;
+    modal.scrollTop = 0;
+    const modalBody = modal.querySelector('.modal-body');
+    if (modalBody) modalBody.scrollTop = 0;
     overlay.classList.add('active');
     actions.forEach(a => {
         const btn = document.getElementById(`modal-action-${a.id}`);
@@ -110,18 +136,18 @@ export function animateReward(element) {
 }
 
 export function createConfetti(container) {
-    const colors = ['#6c5ce7', '#00cec9', '#fdcb6e', '#ff6b6b', '#74b9ff', '#a29bfe'];
-    for (let i = 0; i < 50; i++) {
+    const colors = ['#1f6feb', '#2f5ea8', '#3d4b66', '#14876d', '#7a8daa'];
+    for (let i = 0; i < 24; i++) {
         const confetti = document.createElement('div');
         confetti.className = 'confetti';
         confetti.style.cssText = `
             left: ${Math.random() * 100}%;
             background: ${colors[Math.floor(Math.random() * colors.length)]};
             animation-delay: ${Math.random() * 0.5}s;
-            animation-duration: ${1 + Math.random()}s;
+            animation-duration: ${1.1 + Math.random() * 0.5}s;
         `;
         container.appendChild(confetti);
-        setTimeout(() => confetti.remove(), 2000);
+        setTimeout(() => confetti.remove(), 1800);
     }
 }
 
@@ -220,12 +246,12 @@ export function getWeekNumber(date) {
 }
 
 export const CATEGORIES = {
-    health: { name: 'Salud', icon: '&#9829;', color: '#00b894' },
-    mind: { name: 'Mente', icon: '&#9733;', color: '#6c5ce7' },
-    social: { name: 'Social', icon: '&#9822;', color: '#0984e3' },
-    finance: { name: 'Finanzas', icon: '&#9670;', color: '#fdcb6e' },
-    career: { name: 'Carrera', icon: '&#9650;', color: '#e17055' },
-    spiritual: { name: 'Espiritual', icon: '&#10047;', color: '#00cec9' }
+    health: { name: 'Salud', icon: icon('categoryHealth', 14, 'category-icon-svg'), color: '#14876d' },
+    mind: { name: 'Mente', icon: icon('categoryMind', 14, 'category-icon-svg'), color: '#2f5ea8' },
+    social: { name: 'Social', icon: icon('categorySocial', 14, 'category-icon-svg'), color: '#2d7f8b' },
+    finance: { name: 'Finanzas', icon: icon('categoryFinance', 14, 'category-icon-svg'), color: '#7b5d2a' },
+    career: { name: 'Carrera', icon: icon('categoryCareer', 14, 'category-icon-svg'), color: '#8a4a37' },
+    spiritual: { name: 'Espiritual', icon: icon('categorySpiritual', 14, 'category-icon-svg'), color: '#555692' }
 };
 
 export const LIFE_AREAS = {

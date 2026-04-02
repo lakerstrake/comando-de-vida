@@ -162,51 +162,61 @@ export function loadDefaultTemplates(store) {
             id: generateId(),
             title: 'Planificar el d\u00eda',
             date: todayStr,
-            time: '07:00',
+            timeStart: '07:00',
+            timeEnd: '07:20',
             completed: false,
             important: true,
             urgent: true,
-            pomos: 0
+            pomodorosEstimated: 0,
+            pomodorosCompleted: 0
         },
         {
             id: generateId(),
             title: 'Sesi\u00f3n de ejercicio',
             date: todayStr,
-            time: '08:00',
+            timeStart: '08:00',
+            timeEnd: '08:50',
             completed: false,
             important: true,
             urgent: false,
-            pomos: 2
+            pomodorosEstimated: 2,
+            pomodorosCompleted: 0
         },
         {
             id: generateId(),
             title: 'Bloque de trabajo profundo',
             date: todayStr,
-            time: '09:00',
+            timeStart: '09:00',
+            timeEnd: '11:00',
             completed: false,
             important: true,
             urgent: true,
-            pomos: 4
+            pomodorosEstimated: 4,
+            pomodorosCompleted: 0
         },
         {
             id: generateId(),
             title: 'Revisar metas semanales',
             date: todayStr,
-            time: '12:00',
+            timeStart: '12:00',
+            timeEnd: '12:30',
             completed: false,
             important: true,
             urgent: false,
-            pomos: 0
+            pomodorosEstimated: 0,
+            pomodorosCompleted: 0
         },
         {
             id: generateId(),
             title: 'Reflexi\u00f3n y diario',
             date: todayStr,
-            time: '21:00',
+            timeStart: '21:00',
+            timeEnd: '21:20',
             completed: false,
             important: true,
             urgent: false,
-            pomos: 0
+            pomodorosEstimated: 0,
+            pomodorosCompleted: 0
         }
     ];
 

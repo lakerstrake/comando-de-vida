@@ -7,6 +7,9 @@ const DEFAULT_DATA = {
         theme: 'dark',
         soundEnabled: true,
         userName: '',
+        profileAvatar: '',
+        simpleMode: true,
+        targetBedtime: '23:00',
         createdAt: new Date().toISOString(),
         language: 'es'
     },
@@ -19,6 +22,8 @@ const DEFAULT_DATA = {
     },
     planner: {
         tasks: [],
+        pomodoroFocusByDate: {},
+        morningRoutineCompletions: {},
         pomodoroSettings: {
             workMinutes: 25,
             shortBreakMinutes: 5,
@@ -57,6 +62,11 @@ class Store {
             const raw = localStorage.getItem(STORAGE_KEY);
             if (raw) {
                 this._data = JSON.parse(raw);
+                const before = JSON.stringify(this._data);
+                this._migrateData();
+                if (JSON.stringify(this._data) !== before) {
+                    this._save();
+                }
             } else {
                 this._data = JSON.parse(JSON.stringify(DEFAULT_DATA));
                 this._save();
@@ -66,6 +76,33 @@ class Store {
             this._data = JSON.parse(JSON.stringify(DEFAULT_DATA));
             this._save();
         }
+    }
+
+    _migrateData() {
+        if (!this._data || typeof this._data !== 'object') {
+            this._data = JSON.parse(JSON.stringify(DEFAULT_DATA));
+            return;
+        }
+
+        this._data.settings = {
+            ...DEFAULT_DATA.settings,
+            ...(this._data.settings || {})
+        };
+
+        this._data.habits = this._data.habits || JSON.parse(JSON.stringify(DEFAULT_DATA.habits));
+        this._data.goals = this._data.goals || JSON.parse(JSON.stringify(DEFAULT_DATA.goals));
+        this._data.planner = this._data.planner || JSON.parse(JSON.stringify(DEFAULT_DATA.planner));
+        this._data.planner.pomodoroFocusByDate = this._data.planner.pomodoroFocusByDate || {};
+        this._data.planner.morningRoutineCompletions = this._data.planner.morningRoutineCompletions || {};
+        this._data.planner.pomodoroSettings = {
+            ...DEFAULT_DATA.planner.pomodoroSettings,
+            ...(this._data.planner.pomodoroSettings || {})
+        };
+        this._data.lifeWheel = this._data.lifeWheel || JSON.parse(JSON.stringify(DEFAULT_DATA.lifeWheel));
+        this._data.journal = this._data.journal || JSON.parse(JSON.stringify(DEFAULT_DATA.journal));
+        this._data.weeklyReviews = this._data.weeklyReviews || [];
+        this._data.stats = this._data.stats || JSON.parse(JSON.stringify(DEFAULT_DATA.stats));
+        this._data.gamification = this._data.gamification || JSON.parse(JSON.stringify(DEFAULT_DATA.gamification));
     }
 
     _save() {

@@ -1,71 +1,124 @@
 // stats.js - Stats & Analytics module
 import { store } from './store.js';
-import { today, formatDate, getStreakForHabit, CATEGORIES, MOODS, LIFE_AREAS } from './ui.js';
+import { formatDate, getStreakForHabit, CATEGORIES } from './ui.js';
 
 let timeRange = 30; // days
 
+function isSimpleMode() {
+    const settings = store.get('settings') || {};
+    return settings.simpleMode !== false;
+}
+
+function getPalette() {
+    const style = getComputedStyle(document.documentElement);
+    return {
+        text: style.getPropertyValue('--text-secondary').trim() || '#475569',
+        textStrong: style.getPropertyValue('--text-primary').trim() || '#0f172a',
+        grid: style.getPropertyValue('--border').trim() || 'rgba(0,0,0,0.1)',
+        accent: style.getPropertyValue('--accent-primary').trim() || '#4f46e5',
+        success: style.getPropertyValue('--accent-success').trim() || '#059669'
+    };
+}
+
+function toTransparentColor(color, alpha = 0.12) {
+    if (color.startsWith('#')) {
+        const hex = color.slice(1);
+        const fullHex = hex.length === 3
+            ? hex.split('').map((c) => c + c).join('')
+            : hex;
+        const intValue = Number.parseInt(fullHex, 16);
+        if (!Number.isNaN(intValue)) {
+            const r = (intValue >> 16) & 255;
+            const g = (intValue >> 8) & 255;
+            const b = intValue & 255;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+    }
+
+    if (color.startsWith('rgba(')) {
+        const values = color.slice(5, -1).split(',').map((v) => v.trim());
+        if (values.length >= 3) {
+            return `rgba(${values[0]}, ${values[1]}, ${values[2]}, ${alpha})`;
+        }
+    }
+
+    if (color.startsWith('rgb(')) {
+        const values = color.slice(4, -1).split(',').map((v) => v.trim());
+        if (values.length >= 3) {
+            return `rgba(${values[0]}, ${values[1]}, ${values[2]}, ${alpha})`;
+        }
+    }
+
+    return `rgba(79, 70, 229, ${alpha})`;
+}
+
 export function render() {
     const container = document.getElementById('main-content');
+    const simpleMode = isSimpleMode();
 
     container.innerHTML = `
         <div class="stats-page">
             <div class="page-header">
-                <h1>&#128202; Estad\u00edsticas</h1>
+                <h1>Estadísticas</h1>
                 <div class="header-actions">
                     <select id="time-range" class="btn btn-sm btn-ghost">
-                        <option value="7" ${timeRange === 7 ? 'selected' : ''}>7 d\u00edas</option>
-                        <option value="30" ${timeRange === 30 ? 'selected' : ''}>30 d\u00edas</option>
-                        <option value="90" ${timeRange === 90 ? 'selected' : ''}>90 d\u00edas</option>
+                        <option value="7" ${timeRange === 7 ? 'selected' : ''}>7 días</option>
+                        <option value="30" ${timeRange === 30 ? 'selected' : ''}>30 días</option>
+                        <option value="90" ${timeRange === 90 ? 'selected' : ''}>90 días</option>
                     </select>
                 </div>
             </div>
 
-            <div class="stats-grid">
+            <div class="stats-grid ${simpleMode ? 'stats-grid-simple' : ''}">
                 <div class="glass-card stat-card">
-                    <h3>&#128293; Tasa de H\u00e1bitos</h3>
+                    <h3>Cumplimiento de hábitos</h3>
                     <canvas id="habits-chart" width="500" height="250"></canvas>
                 </div>
 
                 <div class="glass-card stat-card">
-                    <h3>&#127912; Tendencia de \u00c1nimo</h3>
-                    <canvas id="mood-chart" width="500" height="250"></canvas>
-                </div>
-
-                <div class="glass-card stat-card">
-                    <h3>&#128293; Top Rachas</h3>
-                    <canvas id="streaks-chart" width="500" height="250"></canvas>
-                </div>
-
-                <div class="glass-card stat-card">
-                    <h3>&#9745; Productividad (Tareas)</h3>
+                    <h3>Tareas completadas</h3>
                     <canvas id="tasks-chart" width="500" height="250"></canvas>
                 </div>
+
+                ${simpleMode ? '' : `
+                    <div class="glass-card stat-card">
+                        <h3>Tendencia de ánimo</h3>
+                        <canvas id="mood-chart" width="500" height="250"></canvas>
+                    </div>
+
+                    <div class="glass-card stat-card">
+                        <h3>Top rachas</h3>
+                        <canvas id="streaks-chart" width="500" height="250"></canvas>
+                    </div>
+                `}
             </div>
 
             <div class="glass-card" style="margin-top:16px;padding:16px">
-                <h3>&#128200; Resumen del Per\u00edodo</h3>
+                <h3>${simpleMode ? 'Resumen esencial' : 'Resumen del período'}</h3>
                 <div id="period-summary" class="period-summary"></div>
             </div>
         </div>
     `;
 
     document.getElementById('time-range')?.addEventListener('change', (e) => {
-        timeRange = parseInt(e.target.value);
+        timeRange = parseInt(e.target.value, 10);
         render();
     });
 
     drawHabitsChart();
-    drawMoodChart();
-    drawStreaksChart();
     drawTasksChart();
-    renderPeriodSummary();
+    if (!simpleMode) {
+        drawMoodChart();
+        drawStreaksChart();
+    }
+    renderPeriodSummary(simpleMode);
 }
 
 function getDates(range) {
     const dates = [];
-    const d = new Date();
+    const now = new Date();
     for (let i = range - 1; i >= 0; i--) {
-        const dt = new Date(d);
+        const dt = new Date(now);
         dt.setDate(dt.getDate() - i);
         dates.push(formatDate(dt));
     }
@@ -81,20 +134,20 @@ function setupCanvas(canvasId) {
     const h = 220;
     canvas.width = w * dpr;
     canvas.height = h * dpr;
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
     ctx.scale(dpr, dpr);
     return { ctx, w, h };
 }
 
-function drawLineChart(ctx, w, h, dates, values, color, label, maxVal = null) {
+function drawLineChart(ctx, w, h, dates, values, color, maxVal = null) {
+    const palette = getPalette();
     const padding = { top: 20, right: 20, bottom: 35, left: 40 };
     const chartW = w - padding.left - padding.right;
     const chartH = h - padding.top - padding.bottom;
     const max = maxVal || Math.max(...values, 1);
 
-    // Grid
-    ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+    ctx.strokeStyle = palette.grid;
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
         const y = padding.top + (chartH / 4) * i;
@@ -102,48 +155,46 @@ function drawLineChart(ctx, w, h, dates, values, color, label, maxVal = null) {
         ctx.moveTo(padding.left, y);
         ctx.lineTo(w - padding.right, y);
         ctx.stroke();
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillStyle = palette.text;
         ctx.font = '10px sans-serif';
         ctx.textAlign = 'right';
         ctx.fillText(Math.round(max - (max / 4) * i), padding.left - 5, y + 4);
     }
 
-    // X labels
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillStyle = palette.text;
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'center';
     const step = Math.max(1, Math.floor(dates.length / 7));
-    dates.forEach((d, i) => {
-        if (i % step === 0) {
-            const x = padding.left + (i / (dates.length - 1 || 1)) * chartW;
-            ctx.fillText(d.slice(5), x, h - 5);
+    dates.forEach((date, index) => {
+        if (index % step === 0) {
+            const x = padding.left + (index / (dates.length - 1 || 1)) * chartW;
+            ctx.fillText(date.slice(5), x, h - 5);
         }
     });
 
-    // Line
     if (values.length < 2) return;
+
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
-    values.forEach((v, i) => {
-        const x = padding.left + (i / (values.length - 1)) * chartW;
-        const y = padding.top + chartH - (v / max) * chartH;
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    values.forEach((value, index) => {
+        const x = padding.left + (index / (values.length - 1)) * chartW;
+        const y = padding.top + chartH - (value / max) * chartH;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
     });
     ctx.stroke();
 
-    // Area
     ctx.lineTo(padding.left + chartW, padding.top + chartH);
     ctx.lineTo(padding.left, padding.top + chartH);
     ctx.closePath();
-    ctx.fillStyle = color.replace(')', ', 0.1)').replace('rgb', 'rgba');
+    ctx.fillStyle = toTransparentColor(color, 0.12);
     ctx.fill();
 
-    // Dots
-    values.forEach((v, i) => {
-        const x = padding.left + (i / (values.length - 1)) * chartW;
-        const y = padding.top + chartH - (v / max) * chartH;
+    values.forEach((value, index) => {
+        const x = padding.left + (index / (values.length - 1)) * chartW;
+        const y = padding.top + chartH - (value / max) * chartH;
         ctx.beginPath();
         ctx.arc(x, y, 3, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -152,6 +203,7 @@ function drawLineChart(ctx, w, h, dates, values, color, label, maxVal = null) {
 }
 
 function drawBarChart(ctx, w, h, labels, values, colors) {
+    const palette = getPalette();
     const padding = { top: 20, right: 20, bottom: 50, left: 40 };
     const chartW = w - padding.left - padding.right;
     const chartH = h - padding.top - padding.bottom;
@@ -159,30 +211,25 @@ function drawBarChart(ctx, w, h, labels, values, colors) {
     const barWidth = Math.min(40, (chartW / values.length) * 0.7);
     const gap = (chartW - barWidth * values.length) / (values.length + 1);
 
-    values.forEach((v, i) => {
-        const x = padding.left + gap + i * (barWidth + gap);
-        const barH = (v / max) * chartH;
+    values.forEach((value, index) => {
+        const x = padding.left + gap + index * (barWidth + gap);
+        const barH = (value / max) * chartH;
         const y = padding.top + chartH - barH;
 
-        // Bar
-        ctx.fillStyle = colors[i % colors.length];
-        ctx.beginPath();
-        ctx.roundRect?.(x, y, barWidth, barH, [4, 4, 0, 0]) || ctx.fillRect(x, y, barWidth, barH);
-        ctx.fill();
+        ctx.fillStyle = colors[index % colors.length];
+        ctx.fillRect(x, y, barWidth, barH);
 
-        // Value
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillStyle = palette.textStrong;
         ctx.font = '11px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(v, x + barWidth / 2, y - 5);
+        ctx.fillText(value, x + barWidth / 2, y - 5);
 
-        // Label
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillStyle = palette.text;
         ctx.font = '10px sans-serif';
         ctx.save();
         ctx.translate(x + barWidth / 2, h - 5);
         ctx.rotate(-0.4);
-        ctx.fillText(labels[i], 0, 0);
+        ctx.fillText(labels[index], 0, 0);
         ctx.restore();
     });
 }
@@ -192,15 +239,15 @@ function drawHabitsChart() {
     if (!setup) return;
     const { ctx, w, h } = setup;
     const dates = getDates(timeRange);
-    const habits = (store.get('habits.items') || []).filter(hab => !hab.archived);
+    const habits = (store.get('habits.items') || []).filter((habit) => !habit.archived);
     const completions = store.get('habits.completions') || {};
 
-    const values = dates.map(d => {
-        const dayDone = (completions[d] || []).length;
+    const values = dates.map((date) => {
+        const dayDone = (completions[date] || []).length;
         return habits.length ? Math.round((dayDone / habits.length) * 100) : 0;
     });
 
-    drawLineChart(ctx, w, h, dates, values, 'rgb(108, 92, 231)', 'Completion %', 100);
+    drawLineChart(ctx, w, h, dates, values, getPalette().accent, 100);
 }
 
 function drawMoodChart() {
@@ -210,43 +257,44 @@ function drawMoodChart() {
     const dates = getDates(timeRange);
     const entries = store.get('journal.entries') || [];
     const entryMap = {};
-    entries.forEach(e => entryMap[e.date] = e);
-
-    const values = dates.map(d => entryMap[d]?.mood || 0);
-    // Draw colored background zones
-    const padding = { top: 20, right: 20, bottom: 35, left: 40 };
-    const chartH = h - padding.top - padding.bottom;
-    const zoneColors = ['rgba(255,107,107,0.05)', 'rgba(225,112,85,0.05)', 'rgba(253,203,110,0.05)', 'rgba(0,206,201,0.05)', 'rgba(0,184,148,0.05)'];
-    zoneColors.forEach((c, i) => {
-        ctx.fillStyle = c;
-        ctx.fillRect(padding.left, padding.top + (chartH / 5) * (4 - i), w - padding.left - padding.right, chartH / 5);
+    entries.forEach((entry) => {
+        entryMap[entry.date] = entry;
     });
 
-    drawLineChart(ctx, w, h, dates, values, 'rgb(0, 206, 201)', 'Mood', 5);
+    const values = dates.map((date) => entryMap[date]?.mood || 0);
+    drawLineChart(ctx, w, h, dates, values, 'rgb(0, 170, 140)', 5);
 }
 
 function drawStreaksChart() {
     const setup = setupCanvas('streaks-chart');
     if (!setup) return;
     const { ctx, w, h } = setup;
-    const habits = (store.get('habits.items') || []).filter(hab => !hab.archived);
+    const habits = (store.get('habits.items') || []).filter((habit) => !habit.archived);
     const completions = store.get('habits.completions') || {};
+    const palette = getPalette();
 
-    const streakData = habits.map(hab => ({
-        name: hab.name.length > 15 ? hab.name.slice(0, 15) + '...' : hab.name,
-        streak: getStreakForHabit(hab.id, completions),
-        color: CATEGORIES[hab.category]?.color || '#6c5ce7'
+    const streakData = habits.map((habit) => ({
+        name: habit.name.length > 15 ? `${habit.name.slice(0, 15)}...` : habit.name,
+        streak: getStreakForHabit(habit.id, completions),
+        color: CATEGORIES[habit.category]?.color || palette.accent
     })).sort((a, b) => b.streak - a.streak).slice(0, 8);
 
     if (!streakData.length) {
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillStyle = palette.text;
         ctx.font = '14px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('No hay rachas aún', w / 2, h / 2);
+        ctx.fillText('No hay rachas registradas', w / 2, h / 2);
         return;
     }
 
-    drawBarChart(ctx, w, h, streakData.map(s => s.name), streakData.map(s => s.streak), streakData.map(s => s.color));
+    drawBarChart(
+        ctx,
+        w,
+        h,
+        streakData.map((streak) => streak.name),
+        streakData.map((streak) => streak.streak),
+        streakData.map((streak) => streak.color)
+    );
 }
 
 function drawTasksChart() {
@@ -256,20 +304,20 @@ function drawTasksChart() {
     const dates = getDates(timeRange);
     const tasks = store.get('planner.tasks') || [];
 
-    const values = dates.map(d => {
-        const dayTasks = tasks.filter(t => t.date === d);
-        const done = dayTasks.filter(t => t.completed).length;
-        return done;
+    const values = dates.map((date) => {
+        const dayTasks = tasks.filter((task) => task.date === date);
+        return dayTasks.filter((task) => task.completed).length;
     });
 
-    drawLineChart(ctx, w, h, dates, values, 'rgb(0, 184, 148)', 'Tasks done');
+    drawLineChart(ctx, w, h, dates, values, getPalette().success);
 }
 
-function renderPeriodSummary() {
+function renderPeriodSummary(simpleMode) {
     const el = document.getElementById('period-summary');
     if (!el) return;
+
     const dates = getDates(timeRange);
-    const habits = (store.get('habits.items') || []).filter(h => !h.archived);
+    const habits = (store.get('habits.items') || []).filter((habit) => !habit.archived);
     const completions = store.get('habits.completions') || {};
     const tasks = store.get('planner.tasks') || [];
     const entries = store.get('journal.entries') || [];
@@ -282,45 +330,54 @@ function renderPeriodSummary() {
     let moodSum = 0;
     let moodCount = 0;
 
-    dates.forEach(d => {
-        const dayComp = (completions[d] || []).length;
+    dates.forEach((date) => {
+        const dayComp = (completions[date] || []).length;
         totalHabitChecks += dayComp;
         totalPossible += habits.length;
 
-        const dayTasks = tasks.filter(t => t.date === d);
+        const dayTasks = tasks.filter((task) => task.date === date);
         totalTasks += dayTasks.length;
-        totalTasksDone += dayTasks.filter(t => t.completed).length;
+        totalTasksDone += dayTasks.filter((task) => task.completed).length;
 
-        const entry = entries.find(e => e.date === d);
+        const entry = entries.find((journalEntry) => journalEntry.date === date);
         if (entry) {
             journalDays++;
-            if (entry.mood) { moodSum += entry.mood; moodCount++; }
+            if (entry.mood) {
+                moodSum += entry.mood;
+                moodCount++;
+            }
         }
     });
 
     const habitRate = totalPossible ? Math.round((totalHabitChecks / totalPossible) * 100) : 0;
     const taskRate = totalTasks ? Math.round((totalTasksDone / totalTasks) * 100) : 0;
     const avgMood = moodCount ? (moodSum / moodCount).toFixed(1) : '-';
+    const focusHint = habitRate < 70
+        ? 'Enfoque sugerido: simplificar hábitos diarios y sostener una rutina base.'
+        : taskRate < 70
+            ? 'Enfoque sugerido: reducir tareas abiertas y priorizar 1 a 3 tareas clave por día.'
+            : 'Buen ritmo: mantén el mismo nivel de constancia.';
 
     el.innerHTML = `
         <div class="summary-grid">
             <div class="summary-item">
                 <span class="summary-value">${habitRate}%</span>
-                <span class="summary-label">Cumplimiento de H\u00e1bitos</span>
+                <span class="summary-label">Cumplimiento de hábitos</span>
             </div>
             <div class="summary-item">
                 <span class="summary-value">${totalTasksDone}/${totalTasks}</span>
-                <span class="summary-label">Tareas Completadas</span>
+                <span class="summary-label">Tareas completadas</span>
             </div>
             <div class="summary-item">
                 <span class="summary-value">${journalDays}/${timeRange}</span>
-                <span class="summary-label">D\u00edas con Diario</span>
+                <span class="summary-label">Días con diario</span>
             </div>
             <div class="summary-item">
                 <span class="summary-value">${avgMood}</span>
-                <span class="summary-label">\u00c1nimo Promedio (1-5)</span>
+                <span class="summary-label">Ánimo promedio (1-5)</span>
             </div>
         </div>
+        ${simpleMode ? `<p class="text-secondary" style="margin-top:12px">${focusHint}</p>` : ''}
     `;
 }
 

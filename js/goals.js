@@ -1,42 +1,76 @@
 // goals.js - Goals System module
 import { store } from './store.js';
-import { generateId, formatDate, formatDateDisplay, today, showToast, showModal, closeModal, playSound, CATEGORIES, getDaysBetween } from './ui.js';
+import { generateId, formatDateDisplay, today, showToast, showModal, closeModal, playSound, CATEGORIES, getDaysBetween, escapeHtml } from './ui.js';
 
 let currentView = 'list';
+let editingGoalId = null;
+
+function isSimpleMode() {
+    const settings = store.get('settings') || {};
+    return settings.simpleMode !== false;
+}
 
 export function render() {
     const container = document.getElementById('main-content');
     const goals = store.get('goals.items') || [];
-    const activeGoals = goals.filter(g => g.status === 'active');
-    const completedGoals = goals.filter(g => g.status === 'completed');
+    if (editingGoalId && !goals.some((g) => g.id === editingGoalId)) editingGoalId = null;
+    const activeGoals = goals.filter((g) => g.status === 'active');
+    const completedGoals = goals.filter((g) => g.status === 'completed');
+    const simpleMode = isSimpleMode();
+
+    if (simpleMode) currentView = 'list';
 
     container.innerHTML = `
         <div class="goals-page">
             <div class="page-header">
                 <h1>Metas</h1>
                 <div class="header-actions">
-                    <button class="btn btn-sm btn-ghost" onclick="window.goalsToggleView()">${currentView === 'list' ? '&#9638; Vision Board' : '&#9776; Lista'}</button>
-                    <button class="btn btn-primary btn-sm" id="add-goal-btn">+ Nueva Meta</button>
+                    ${!simpleMode ? `<button class="btn btn-sm btn-ghost" onclick="window.goalsToggleView()">${currentView === 'list' ? 'Vista visual' : 'Vista lista'}</button>` : ''}
+                    <button class="btn btn-primary btn-sm" id="add-goal-btn">Nueva meta</button>
                 </div>
             </div>
-
+            ${simpleMode ? '<p class="text-secondary" style="margin-bottom:14px;font-size:0.85rem">Define pocas metas activas para mantener foco y constancia.</p>' : ''}
             ${currentView === 'list' ? renderListView(activeGoals, completedGoals) : renderVisionBoard(activeGoals)}
         </div>
     `;
 
     document.getElementById('add-goal-btn')?.addEventListener('click', showAddGoalForm);
 
-    document.querySelectorAll('.goal-card').forEach(card => {
+    document.querySelectorAll('.goal-card').forEach((card) => {
         card.addEventListener('click', (e) => {
-            if (e.target.closest('button')) return;
+            if (e.target.closest('button, input, textarea, select, .goal-inline-edit')) return;
             showGoalDetail(card.dataset.id);
         });
     });
 
-    document.querySelectorAll('.goal-delete').forEach(btn => {
+    document.querySelectorAll('.goal-delete').forEach((btn) => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             deleteGoal(btn.dataset.id);
+        });
+    });
+    document.querySelectorAll('.goal-edit').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            startInlineEdit(btn.dataset.id);
+        });
+    });
+    document.querySelectorAll('.goal-inline-save').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            saveInlineEdit(btn.dataset.id);
+        });
+    });
+    document.querySelectorAll('.goal-inline-cancel').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            cancelInlineEdit();
+        });
+    });
+    document.querySelectorAll('.goal-inline-form .range-slider').forEach((slider) => {
+        slider.addEventListener('input', () => {
+            const value = document.getElementById(`inline-goal-progress-value-${slider.dataset.goalId || slider.id.replace('inline-goal-progress-', '')}`);
+            if (value) value.textContent = `${slider.value}%`;
         });
     });
 }
@@ -44,31 +78,32 @@ export function render() {
 function renderListView(activeGoals, completedGoals) {
     const grouped = {};
     for (const cat of Object.keys(CATEGORIES)) {
-        const catGoals = activeGoals.filter(g => g.category === cat);
+        const catGoals = activeGoals.filter((g) => g.category === cat);
         if (catGoals.length) grouped[cat] = catGoals;
     }
 
-    let html = '';
     if (!activeGoals.length && !completedGoals.length) {
         return `
             <div class="empty-state glass-card">
-                <p class="empty-icon">&#127919;</p>
-                <h3>Define tu destino</h3>
-                <p>Sin metas claras, tu cerebro no puede activar el Sistema de Activaci\u00f3n Reticular (SAR), el filtro que te hace notar oportunidades alineadas con tus objetivos.</p>
-                <button class="btn btn-primary" id="add-goal-empty" onclick="document.getElementById('add-goal-btn').click()">+ Crear primera meta</button>
+                <p class="empty-state-kicker">Metas</p>
+                <h3>Elige un objetivo principal</h3>
+                <p>Un objetivo claro mejora la atención y facilita sostener hábitos consistentes.</p>
+                <button class="btn btn-primary" id="add-goal-empty" onclick="document.getElementById('add-goal-btn').click()">Crear primera meta</button>
             </div>
         `;
     }
 
-    for (const [cat, goals] of Object.entries(grouped)) {
+    let html = '';
+    for (const [cat, catGoals] of Object.entries(grouped)) {
         const catInfo = CATEGORIES[cat];
         html += `
             <div class="goal-category">
-                <h3 class="category-header" style="color: ${catInfo.color}">
-                    <span>${catInfo.icon}</span> ${catInfo.name}
+                <h3 class="category-header">
+                    <span class="category-dot" style="background:${catInfo.color};"></span>
+                    ${catInfo.name}
                 </h3>
                 <div class="goals-list">
-                    ${goals.map(g => renderGoalCard(g, catInfo)).join('')}
+                    ${catGoals.map((g) => renderGoalCard(g, catInfo)).join('')}
                 </div>
             </div>
         `;
@@ -77,9 +112,9 @@ function renderListView(activeGoals, completedGoals) {
     if (completedGoals.length) {
         html += `
             <div class="goal-category">
-                <h3 class="category-header" style="color: var(--accent-success)">&#10003; Completadas (${completedGoals.length})</h3>
+                <h3 class="category-header"><span class="category-dot" style="background:var(--accent-success);"></span>Completadas (${completedGoals.length})</h3>
                 <div class="goals-list">
-                    ${completedGoals.map(g => renderGoalCard(g, CATEGORIES[g.category] || {})).join('')}
+                    ${completedGoals.map((g) => renderGoalCard(g, CATEGORIES[g.category] || {})).join('')}
                 </div>
             </div>
         `;
@@ -88,26 +123,80 @@ function renderListView(activeGoals, completedGoals) {
     return html;
 }
 
-function renderGoalCard(g, catInfo) {
-    const daysLeft = g.timeBound ? getDaysBetween(today(), g.timeBound) : null;
-    const isOverdue = g.timeBound && g.timeBound < today() && g.status === 'active';
+function renderGoalCard(goal, catInfo) {
+    const daysLeft = goal.timeBound ? getDaysBetween(today(), goal.timeBound) : null;
+    const isOverdue = goal.timeBound && goal.timeBound < today() && goal.status === 'active';
+    const isInlineEditing = editingGoalId === goal.id;
+
+    if (isInlineEditing) {
+        return `
+            <div class="goal-card glass-card goal-inline-edit ${goal.status === 'completed' ? 'goal-completed' : ''}" data-id="${goal.id}">
+                <div class="goal-card-header">
+                    <h4>Editando meta</h4>
+                    <div class="goal-card-actions">
+                        <button class="btn-icon goal-inline-cancel" data-id="${goal.id}" title="Cancelar" aria-label="Cancelar edicion">&times;</button>
+                    </div>
+                </div>
+                <div class="goal-inline-form">
+                    <div class="goal-inline-grid">
+                        <div class="form-group">
+                            <label for="inline-goal-title-${goal.id}">Titulo</label>
+                            <input type="text" id="inline-goal-title-${goal.id}" value="${escapeHtml(goal.title || '')}" maxlength="90" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="inline-goal-category-${goal.id}">Categoria</label>
+                            <select id="inline-goal-category-${goal.id}">
+                                ${Object.entries(CATEGORIES).map(([key, cat]) => `<option value="${key}" ${goal.category === key ? 'selected' : ''}>${cat.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="inline-goal-desc-${goal.id}">Descripcion</label>
+                        <textarea id="inline-goal-desc-${goal.id}" rows="2" maxlength="220">${escapeHtml(goal.description || '')}</textarea>
+                    </div>
+                    <div class="goal-inline-grid">
+                        <div class="form-group">
+                            <label for="inline-goal-timebound-${goal.id}">Fecha limite</label>
+                            <input type="date" id="inline-goal-timebound-${goal.id}" value="${goal.timeBound || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label for="inline-goal-progress-${goal.id}">Progreso</label>
+                            <div class="goal-inline-slider-row">
+                                <input type="range" id="inline-goal-progress-${goal.id}" data-goal-id="${goal.id}" min="0" max="100" value="${goal.progress}" class="range-slider">
+                                <span class="goal-inline-slider-value" id="inline-goal-progress-value-${goal.id}">${goal.progress}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="goal-inline-actions">
+                        <button type="button" class="btn btn-secondary btn-sm goal-inline-cancel" data-id="${goal.id}">Cancelar</button>
+                        <button type="button" class="btn btn-primary btn-sm goal-inline-save" data-id="${goal.id}">Guardar</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
 
     return `
-        <div class="goal-card glass-card ${g.status === 'completed' ? 'goal-completed' : ''}" data-id="${g.id}">
+        <div class="goal-card glass-card ${goal.status === 'completed' ? 'goal-completed' : ''}" data-id="${goal.id}">
             <div class="goal-card-header">
-                <h4>${g.title}</h4>
-                <button class="btn-icon goal-delete" data-id="${g.id}" title="Eliminar">&#128465;</button>
+                <h4>${goal.title}</h4>
+                <div class="goal-card-actions">
+                    <button class="btn-icon goal-edit" data-id="${goal.id}" title="Editar" aria-label="Editar meta">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </button>
+                    <button class="btn-icon goal-delete" data-id="${goal.id}" title="Eliminar" aria-label="Eliminar meta">&times;</button>
+                </div>
             </div>
-            <p class="text-secondary goal-desc">${g.description || ''}</p>
+            <p class="text-secondary goal-desc">${goal.description || ''}</p>
             <div class="progress-stat">
                 <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${g.progress}%; background: ${catInfo.color || 'var(--accent-primary)'}"></div>
+                    <div class="progress-fill" style="width: ${goal.progress}%; background: ${catInfo.color || 'var(--accent-primary)'}"></div>
                 </div>
-                <span class="stat-number">${g.progress}%</span>
+                <span class="stat-number">${goal.progress}%</span>
             </div>
             <div class="goal-meta">
-                ${g.milestones ? `<span>${g.milestones.filter(m => m.completed).length}/${g.milestones.length} hitos</span>` : ''}
-                ${daysLeft !== null ? `<span class="${isOverdue ? 'text-danger' : ''}">${isOverdue ? 'Vencida' : daysLeft + ' d\u00edas restantes'}</span>` : ''}
+                ${goal.milestones ? `<span>${goal.milestones.filter((m) => m.completed).length}/${goal.milestones.length} hitos</span>` : ''}
+                ${daysLeft !== null ? `<span class="${isOverdue ? 'text-danger' : ''}">${isOverdue ? 'Vencida' : `${daysLeft} días restantes`}</span>` : ''}
             </div>
         </div>
     `;
@@ -115,20 +204,20 @@ function renderGoalCard(g, catInfo) {
 
 function renderVisionBoard(goals) {
     if (!goals.length) {
-        return `<div class="empty-state glass-card"><p>Crea metas para ver tu Vision Board</p></div>`;
+        return '<div class="empty-state glass-card"><p>Crea metas para ver la vista visual.</p></div>';
     }
     return `
         <div class="vision-board">
-            ${goals.map(g => {
-                const catInfo = CATEGORIES[g.category] || {};
+            ${goals.map((goal) => {
+                const catInfo = CATEGORIES[goal.category] || {};
                 return `
-                    <div class="vision-card glass-card goal-card" data-id="${g.id}" style="border-left: 3px solid ${catInfo.color || '#6c5ce7'}">
-                        <h4>${g.title}</h4>
-                        <p class="text-secondary">${g.description || ''}</p>
+                    <div class="vision-card glass-card goal-card" data-id="${goal.id}" style="border-left: 3px solid ${catInfo.color || 'var(--accent-primary)'}">
+                        <h4>${goal.title}</h4>
+                        <p class="text-secondary">${goal.description || ''}</p>
                         <div class="progress-bar" style="height:6px">
-                            <div class="progress-fill" style="width:${g.progress}%;background:${catInfo.color || 'var(--accent-primary)'}"></div>
+                            <div class="progress-fill" style="width:${goal.progress}%;background:${catInfo.color || 'var(--accent-primary)'}"></div>
                         </div>
-                        <span class="stat-number">${g.progress}%</span>
+                        <span class="stat-number">${goal.progress}%</span>
                     </div>
                 `;
             }).join('')}
@@ -137,75 +226,96 @@ function renderVisionBoard(goals) {
 }
 
 function showAddGoalForm() {
+    const simpleMode = isSimpleMode();
     const formHtml = `
         <form id="goal-form" class="form">
             <div class="form-group">
-                <label>T\u00edtulo de la meta</label>
-                <input type="text" id="goal-title" placeholder="Ej: Correr un marat\u00f3n" required>
+                <label>Título de la meta</label>
+                <input type="text" id="goal-title" placeholder="Ej: Correr 10 km" required>
             </div>
             <div class="form-group">
-                <label>Categor\u00eda</label>
+                <label>Categoría</label>
                 <select id="goal-category">
-                    ${Object.entries(CATEGORIES).map(([key, cat]) =>
-                        `<option value="${key}">${cat.icon} ${cat.name}</option>`
-                    ).join('')}
+                    ${Object.entries(CATEGORIES).map(([key, cat]) => `<option value="${key}">${cat.name}</option>`).join('')}
                 </select>
             </div>
             <div class="form-group">
-                <label>Descripci\u00f3n</label>
-                <textarea id="goal-desc" rows="2" placeholder="Describe tu meta con detalle..."></textarea>
+                <label>Descripción</label>
+                <textarea id="goal-desc" rows="2" placeholder="Define el resultado esperado"></textarea>
             </div>
-            <fieldset class="form-fieldset">
-                <legend>Metodolog\u00eda SMART</legend>
-                <div class="form-group">
-                    <label>Espec\u00edfica (S)</label>
-                    <input type="text" id="goal-specific" placeholder="\u00bfQu\u00e9 exactamente quieres lograr?">
-                </div>
-                <div class="form-group">
-                    <label>Medible (M)</label>
-                    <input type="text" id="goal-measurable" placeholder="\u00bfC\u00f3mo sabr\u00e1s que lo lograste?">
-                </div>
-                <div class="form-group">
-                    <label>Alcanzable (A)</label>
-                    <input type="text" id="goal-achievable" placeholder="\u00bfEs realista con tus recursos actuales?">
-                </div>
-                <div class="form-group">
-                    <label>Relevante (R)</label>
-                    <input type="text" id="goal-relevant" placeholder="\u00bfPor qu\u00e9 es importante para ti?">
-                </div>
-                <div class="form-group">
-                    <label>Temporal (T) - Fecha l\u00edmite</label>
-                    <input type="date" id="goal-timebound">
-                </div>
-            </fieldset>
             <div class="form-group">
-                <label>Hitos (uno por l\u00ednea)</label>
-                <textarea id="goal-milestones" rows="3" placeholder="Semana 1: Correr 5km\nMes 1: Correr 10km\nMes 3: Correr 21km"></textarea>
+                <label>Fecha límite (opcional)</label>
+                <input type="date" id="goal-timebound">
             </div>
-            <button type="submit" class="btn btn-primary btn-block">Crear Meta</button>
+
+            <div class="form-group">
+                <label class="check-toggle check-toggle-advanced" for="goal-advanced-toggle">
+                    <input type="checkbox" id="goal-advanced-toggle" ${simpleMode ? '' : 'checked'}>
+                    <span>Mostrar opciones avanzadas</span>
+                </label>
+            </div>
+
+            <div id="goal-advanced-fields" style="display:${simpleMode ? 'none' : 'block'}">
+                <fieldset class="form-fieldset">
+                    <legend>SMART</legend>
+                    <div class="form-group">
+                        <label>Específica</label>
+                        <input type="text" id="goal-specific" placeholder="Qué exactamente quieres lograr">
+                    </div>
+                    <div class="form-group">
+                        <label>Medible</label>
+                        <input type="text" id="goal-measurable" placeholder="Cómo medirás el avance">
+                    </div>
+                    <div class="form-group">
+                        <label>Alcanzable</label>
+                        <input type="text" id="goal-achievable" placeholder="Recursos y límite realista">
+                    </div>
+                    <div class="form-group">
+                        <label>Relevante</label>
+                        <input type="text" id="goal-relevant" placeholder="Por qué es importante para ti">
+                    </div>
+                </fieldset>
+                <div class="form-group">
+                    <label>Hitos (uno por línea)</label>
+                    <textarea id="goal-milestones" rows="3" placeholder="Semana 1: ...&#10;Semana 2: ..."></textarea>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Crear meta</button>
         </form>
     `;
 
-    showModal('Nueva Meta SMART', formHtml);
-    document.getElementById('goal-form').addEventListener('submit', (e) => {
+    showModal('Nueva meta', formHtml);
+
+    const advancedToggle = document.getElementById('goal-advanced-toggle');
+    const advancedFields = document.getElementById('goal-advanced-fields');
+    advancedToggle?.addEventListener('change', () => {
+        if (!advancedFields) return;
+        advancedFields.style.display = advancedToggle.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('goal-form')?.addEventListener('submit', (e) => {
         e.preventDefault();
-        const milestonesText = document.getElementById('goal-milestones').value.trim();
-        const milestones = milestonesText ? milestonesText.split('\n').filter(m => m.trim()).map(m => ({
-            id: generateId(),
-            title: m.trim(),
-            completed: false,
-            completedAt: null
-        })) : [];
+        const showAdvanced = document.getElementById('goal-advanced-toggle')?.checked;
+        const milestonesText = showAdvanced ? document.getElementById('goal-milestones').value.trim() : '';
+        const milestones = milestonesText
+            ? milestonesText.split('\n').filter((m) => m.trim()).map((m) => ({
+                id: generateId(),
+                title: m.trim(),
+                completed: false,
+                completedAt: null
+            }))
+            : [];
 
         const goal = {
             id: generateId(),
             title: document.getElementById('goal-title').value.trim(),
             category: document.getElementById('goal-category').value,
             description: document.getElementById('goal-desc').value.trim(),
-            specific: document.getElementById('goal-specific').value.trim(),
-            measurable: document.getElementById('goal-measurable').value.trim(),
-            achievable: document.getElementById('goal-achievable').value.trim(),
-            relevant: document.getElementById('goal-relevant').value.trim(),
+            specific: showAdvanced ? document.getElementById('goal-specific').value.trim() : '',
+            measurable: showAdvanced ? document.getElementById('goal-measurable').value.trim() : '',
+            achievable: showAdvanced ? document.getElementById('goal-achievable').value.trim() : '',
+            relevant: showAdvanced ? document.getElementById('goal-relevant').value.trim() : '',
             timeBound: document.getElementById('goal-timebound').value || null,
             milestones,
             progress: 0,
@@ -213,11 +323,12 @@ function showAddGoalForm() {
             createdAt: new Date().toISOString()
         };
 
+        if (!goal.title) return;
         const goals = store.get('goals.items') || [];
         goals.push(goal);
         store.set('goals.items', goals);
         closeModal();
-        showToast('\u00a1Meta creada! Tu SAR ya est\u00e1 buscando oportunidades.');
+        showToast('Meta creada');
         playSound('complete');
         render();
     });
@@ -225,18 +336,17 @@ function showAddGoalForm() {
 
 function showGoalDetail(goalId) {
     const goals = store.get('goals.items') || [];
-    const goal = goals.find(g => g.id === goalId);
+    const goal = goals.find((g) => g.id === goalId);
     if (!goal) return;
-    const catInfo = CATEGORIES[goal.category] || {};
 
     const detailHtml = `
         <div class="goal-detail">
             <div class="goal-smart">
-                ${goal.specific ? `<div class="smart-item"><strong>S - Espec\u00edfica:</strong> ${goal.specific}</div>` : ''}
-                ${goal.measurable ? `<div class="smart-item"><strong>M - Medible:</strong> ${goal.measurable}</div>` : ''}
-                ${goal.achievable ? `<div class="smart-item"><strong>A - Alcanzable:</strong> ${goal.achievable}</div>` : ''}
-                ${goal.relevant ? `<div class="smart-item"><strong>R - Relevante:</strong> ${goal.relevant}</div>` : ''}
-                ${goal.timeBound ? `<div class="smart-item"><strong>T - Temporal:</strong> ${formatDateDisplay(goal.timeBound)}</div>` : ''}
+                ${goal.specific ? `<div class="smart-item"><strong>Específica:</strong> ${goal.specific}</div>` : ''}
+                ${goal.measurable ? `<div class="smart-item"><strong>Medible:</strong> ${goal.measurable}</div>` : ''}
+                ${goal.achievable ? `<div class="smart-item"><strong>Alcanzable:</strong> ${goal.achievable}</div>` : ''}
+                ${goal.relevant ? `<div class="smart-item"><strong>Relevante:</strong> ${goal.relevant}</div>` : ''}
+                ${goal.timeBound ? `<div class="smart-item"><strong>Fecha límite:</strong> ${formatDateDisplay(goal.timeBound)}</div>` : ''}
             </div>
 
             <div class="form-group" style="margin-top:16px">
@@ -248,12 +358,12 @@ function showGoalDetail(goalId) {
                 <div class="milestones-section">
                     <h4>Hitos</h4>
                     <div class="milestone-timeline">
-                        ${goal.milestones.map(m => `
-                            <div class="milestone-item ${m.completed ? 'milestone-done' : ''}">
-                                <button class="milestone-check ${m.completed ? 'checked' : ''}" data-mid="${m.id}">
-                                    ${m.completed ? '&#10003;' : ''}
+                        ${goal.milestones.map((milestone) => `
+                            <div class="milestone-item ${milestone.completed ? 'milestone-done' : ''}">
+                                <button class="milestone-check ${milestone.completed ? 'checked' : ''}" data-mid="${milestone.id}">
+                                    ${milestone.completed ? '&#10003;' : ''}
                                 </button>
-                                <span>${m.title}</span>
+                                <span>${milestone.title}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -261,7 +371,8 @@ function showGoalDetail(goalId) {
             ` : ''}
 
             <div class="goal-detail-actions" style="margin-top:16px;display:flex;gap:8px">
-                ${goal.status === 'active' ? `<button class="btn btn-success btn-sm" id="complete-goal-btn">&#10003; Marcar Completada</button>` : ''}
+                <button class="btn btn-secondary btn-sm" id="edit-goal-btn">Editar meta</button>
+                ${goal.status === 'active' ? '<button class="btn btn-success btn-sm" id="complete-goal-btn">Marcar completada</button>' : ''}
                 <button class="btn btn-secondary btn-sm" id="close-detail-btn">Cerrar</button>
             </div>
         </div>
@@ -269,49 +380,49 @@ function showGoalDetail(goalId) {
 
     showModal(goal.title, detailHtml);
 
-    // Progress slider
     const slider = document.getElementById('goal-progress-slider');
     if (slider) {
         slider.addEventListener('input', (e) => {
-            document.getElementById('progress-val').textContent = e.target.value + '%';
+            document.getElementById('progress-val').textContent = `${e.target.value}%`;
         });
         slider.addEventListener('change', (e) => {
-            goal.progress = parseInt(e.target.value);
+            goal.progress = parseInt(e.target.value, 10);
             store.set('goals.items', goals);
             if (goal.progress === 100) {
-                showToast('\u00a1Meta al 100%! \u00bfLa marcas como completada?');
+                showToast('Meta al 100%. Puedes marcarla como completada.');
             }
+            render();
         });
     }
 
-    // Milestone toggles
-    document.querySelectorAll('.milestone-check').forEach(btn => {
+    document.querySelectorAll('.milestone-check').forEach((btn) => {
         btn.addEventListener('click', () => {
             const mid = btn.dataset.mid;
-            const milestone = goal.milestones.find(m => m.id === mid);
-            if (milestone) {
-                milestone.completed = !milestone.completed;
-                milestone.completedAt = milestone.completed ? new Date().toISOString() : null;
-                // Auto-update progress
-                const completedCount = goal.milestones.filter(m => m.completed).length;
-                goal.progress = Math.round((completedCount / goal.milestones.length) * 100);
-                store.set('goals.items', goals);
-                playSound('complete');
-                showGoalDetail(goalId); // Re-render detail
-                render(); // Update list behind modal
-            }
+            const milestone = goal.milestones.find((m) => m.id === mid);
+            if (!milestone) return;
+            milestone.completed = !milestone.completed;
+            milestone.completedAt = milestone.completed ? new Date().toISOString() : null;
+            const completedCount = goal.milestones.filter((m) => m.completed).length;
+            goal.progress = Math.round((completedCount / goal.milestones.length) * 100);
+            store.set('goals.items', goals);
+            playSound('complete');
+            showGoalDetail(goalId);
+            render();
         });
     });
 
-    // Complete goal
     document.getElementById('complete-goal-btn')?.addEventListener('click', () => {
         goal.status = 'completed';
         goal.progress = 100;
         store.set('goals.items', goals);
         closeModal();
-        showToast('\u00a1Meta completada! Tu cerebro acaba de recibir una gran dosis de dopamina.');
+        showToast('Meta completada');
         playSound('streak');
         render();
+    });
+    document.getElementById('edit-goal-btn')?.addEventListener('click', () => {
+        closeModal();
+        startInlineEdit(goalId);
     });
 
     document.getElementById('close-detail-btn')?.addEventListener('click', () => {
@@ -321,14 +432,150 @@ function showGoalDetail(goalId) {
 }
 
 function deleteGoal(goalId) {
-    if (!confirm('\u00bfEliminar esta meta?')) return;
+    if (!confirm('¿Eliminar esta meta?')) return;
     const goals = store.get('goals.items') || [];
-    store.set('goals.items', goals.filter(g => g.id !== goalId));
+    store.set('goals.items', goals.filter((g) => g.id !== goalId));
     showToast('Meta eliminada');
     render();
 }
 
-window.goalsToggleView = function () {
+function showEditGoalForm(goalId) {
+    const goals = store.get('goals.items') || [];
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) return;
+
+    const milestonesText = (goal.milestones || []).map((m) => m.title).filter(Boolean).join('\n');
+    const formHtml = `
+        <form id="edit-goal-form" class="form">
+            <div class="form-group">
+                <label>Título de la meta</label>
+                <input type="text" id="edit-goal-title" value="${escapeHtml(goal.title || '')}" required>
+            </div>
+            <div class="form-group">
+                <label>Categoría</label>
+                <select id="edit-goal-category">
+                    ${Object.entries(CATEGORIES).map(([key, cat]) => `<option value="${key}" ${goal.category === key ? 'selected' : ''}>${cat.name}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Descripción</label>
+                <textarea id="edit-goal-desc" rows="2">${escapeHtml(goal.description || '')}</textarea>
+            </div>
+            <div class="form-group">
+                <label>Fecha límite (opcional)</label>
+                <input type="date" id="edit-goal-timebound" value="${goal.timeBound || ''}">
+            </div>
+            <div class="form-group">
+                <label>Específica</label>
+                <input type="text" id="edit-goal-specific" value="${escapeHtml(goal.specific || '')}">
+            </div>
+            <div class="form-group">
+                <label>Medible</label>
+                <input type="text" id="edit-goal-measurable" value="${escapeHtml(goal.measurable || '')}">
+            </div>
+            <div class="form-group">
+                <label>Alcanzable</label>
+                <input type="text" id="edit-goal-achievable" value="${escapeHtml(goal.achievable || '')}">
+            </div>
+            <div class="form-group">
+                <label>Relevante</label>
+                <input type="text" id="edit-goal-relevant" value="${escapeHtml(goal.relevant || '')}">
+            </div>
+            <div class="form-group">
+                <label>Hitos (uno por línea)</label>
+                <textarea id="edit-goal-milestones" rows="3">${escapeHtml(milestonesText)}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Guardar cambios</button>
+        </form>
+    `;
+
+    showModal('Editar meta', formHtml);
+    document.getElementById('edit-goal-form')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const newTitle = document.getElementById('edit-goal-title').value.trim();
+        if (!newTitle) return;
+
+        goal.title = newTitle;
+        goal.category = document.getElementById('edit-goal-category').value;
+        goal.description = document.getElementById('edit-goal-desc').value.trim();
+        goal.timeBound = document.getElementById('edit-goal-timebound').value || null;
+        goal.specific = document.getElementById('edit-goal-specific').value.trim();
+        goal.measurable = document.getElementById('edit-goal-measurable').value.trim();
+        goal.achievable = document.getElementById('edit-goal-achievable').value.trim();
+        goal.relevant = document.getElementById('edit-goal-relevant').value.trim();
+
+        const milestoneLines = document.getElementById('edit-goal-milestones').value
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+        goal.milestones = milestoneLines.map((title, index) => {
+            const existing = (goal.milestones || [])[index];
+            return {
+                id: existing?.id || generateId(),
+                title,
+                completed: existing?.completed || false,
+                completedAt: existing?.completedAt || null
+            };
+        });
+        if (!goal.milestones.length) goal.progress = Math.min(goal.progress || 0, 100);
+
+        store.set('goals.items', goals);
+        closeModal();
+        showToast('Meta actualizada');
+        render();
+    });
+}
+
+function startInlineEdit(goalId) {
+    editingGoalId = goalId;
+    render();
+    requestAnimationFrame(() => {
+        const input = document.getElementById(`inline-goal-title-${goalId}`);
+        if (input) input.focus();
+    });
+}
+
+function cancelInlineEdit() {
+    editingGoalId = null;
+    render();
+}
+
+function saveInlineEdit(goalId) {
+    const goals = store.get('goals.items') || [];
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) return;
+
+    const titleInput = document.getElementById(`inline-goal-title-${goalId}`);
+    const categoryInput = document.getElementById(`inline-goal-category-${goalId}`);
+    const descInput = document.getElementById(`inline-goal-desc-${goalId}`);
+    const dateInput = document.getElementById(`inline-goal-timebound-${goalId}`);
+    const progressInput = document.getElementById(`inline-goal-progress-${goalId}`);
+    if (!titleInput || !categoryInput || !descInput || !dateInput || !progressInput) return;
+
+    const newTitle = titleInput.value.trim();
+    if (!newTitle) {
+        titleInput.focus();
+        return;
+    }
+
+    goal.title = newTitle;
+    goal.category = categoryInput.value;
+    goal.description = descInput.value.trim();
+    goal.timeBound = dateInput.value || null;
+    goal.progress = parseInt(progressInput.value, 10) || 0;
+    if (goal.progress === 100 && goal.status === 'active') {
+        goal.status = 'completed';
+    } else if (goal.progress < 100 && goal.status === 'completed') {
+        goal.status = 'active';
+    }
+
+    store.set('goals.items', goals);
+    editingGoalId = null;
+    showToast('Meta actualizada');
+    render();
+}
+
+window.goalsToggleView = function goalsToggleView() {
     currentView = currentView === 'list' ? 'vision' : 'list';
     render();
 };

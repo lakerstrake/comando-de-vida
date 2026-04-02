@@ -4,50 +4,120 @@ import { generateId, today, formatDate, formatDateDisplay, showToast, showModal,
 import { addXP, checkAchievements, XP } from './gamification.js';
 
 let currentTab = 'tasks'; // tasks | matrix | pomodoro
-let pomodoroState = { running: false, timeLeft: 0, mode: 'work', sessions: 0, interval: null, endTime: null };
+let pomodoroState = { running: false, timeLeft: 0, mode: 'work', sessions: 0, interval: null, endTime: null, activeTaskId: null, activeDate: null };
 let selectedDate = today();
+
+function isSimpleMode() {
+    const settings = store.get('settings') || {};
+    return settings.simpleMode !== false;
+}
+
+function normalizeTask(task) {
+    const normalized = { ...task };
+    normalized.title = String(normalized.title || normalized.text || normalized.name || '').trim();
+    normalized.timeStart = normalized.timeStart || normalized.time || null;
+    normalized.timeEnd = normalized.timeEnd || normalized.endTime || null;
+    normalized.pomodorosEstimated = Math.max(0, parseInt(normalized.pomodorosEstimated ?? normalized.pomos ?? 0, 10) || 0);
+    normalized.pomodorosCompleted = Math.max(0, parseInt(normalized.pomodorosCompleted ?? normalized.pomosDone ?? 0, 10) || 0);
+    normalized.completed = Boolean(normalized.completed ?? normalized.done);
+    return normalized;
+}
+
+function getPlannerTasks() {
+    const rawTasks = store.get('planner.tasks') || [];
+    let changed = false;
+    const tasks = rawTasks.map((task) => {
+        const normalized = normalizeTask(task);
+        if (
+            task.title !== normalized.title ||
+            task.timeStart !== normalized.timeStart ||
+            task.timeEnd !== normalized.timeEnd ||
+            task.pomodorosEstimated !== normalized.pomodorosEstimated ||
+            task.pomodorosCompleted !== normalized.pomodorosCompleted ||
+            task.completed !== normalized.completed
+        ) {
+            changed = true;
+        }
+        return normalized;
+    });
+    if (changed) store.set('planner.tasks', tasks);
+    return tasks;
+}
+
+function getPomodoroFocusMap() {
+    return store.get('planner.pomodoroFocusByDate') || {};
+}
+
+function getPomodoroFocusTaskId(date = selectedDate) {
+    const focusByDate = getPomodoroFocusMap();
+    return focusByDate[date] || null;
+}
+
+function setPomodoroFocusTaskId(taskId, date = selectedDate) {
+    const focusByDate = getPomodoroFocusMap();
+    if (taskId) focusByDate[date] = taskId;
+    else delete focusByDate[date];
+    store.set('planner.pomodoroFocusByDate', focusByDate);
+}
 
 export function render() {
     const container = document.getElementById('main-content');
-    const tasks = store.get('planner.tasks') || [];
-    const dayTasks = tasks.filter(t => t.date === selectedDate);
+    const tasks = getPlannerTasks();
+    const dayTasks = tasks.filter((t) => t.date === selectedDate);
+    let focusTaskId = getPomodoroFocusTaskId(selectedDate);
+    if (focusTaskId && !dayTasks.some((t) => t.id === focusTaskId && !t.completed)) {
+        setPomodoroFocusTaskId(null, selectedDate);
+        focusTaskId = null;
+    }
     const settings = store.get('planner.pomodoroSettings');
+    const simpleMode = isSimpleMode();
+
+    if (simpleMode && currentTab === 'matrix') currentTab = 'tasks';
+
+    const tabs = simpleMode
+        ? [
+            { id: 'tasks', label: 'Tareas' },
+            { id: 'pomodoro', label: 'Foco' }
+        ]
+        : [
+            { id: 'tasks', label: 'Tareas' },
+            { id: 'matrix', label: 'Matriz' },
+            { id: 'pomodoro', label: 'Pomodoro' }
+        ];
 
     container.innerHTML = `
         <div class="planner-page">
             <div class="page-header">
                 <h1>Planificador</h1>
                 <div class="date-nav">
-                    <button class="btn btn-sm btn-ghost" id="prev-day">&larr;</button>
+                    <button class="btn btn-sm btn-ghost" id="prev-day" aria-label="Día anterior">&larr;</button>
                     <span class="current-date">${formatDateDisplay(selectedDate)} ${selectedDate === today() ? '(Hoy)' : ''}</span>
-                    <button class="btn btn-sm btn-ghost" id="next-day">&rarr;</button>
+                    <button class="btn btn-sm btn-ghost" id="next-day" aria-label="Día siguiente">&rarr;</button>
                     <button class="btn btn-sm btn-ghost" id="today-btn">Hoy</button>
                 </div>
             </div>
 
             <div class="planner-tabs">
-                <button class="tab-btn ${currentTab === 'tasks' ? 'active' : ''}" data-tab="tasks">&#9776; Tareas</button>
-                <button class="tab-btn ${currentTab === 'matrix' ? 'active' : ''}" data-tab="matrix">&#9638; Eisenhower</button>
-                <button class="tab-btn ${currentTab === 'pomodoro' ? 'active' : ''}" data-tab="pomodoro">&#9200; Pomodoro</button>
+                ${tabs.map((tab) => `
+                    <button class="tab-btn ${currentTab === tab.id ? 'active' : ''}" data-tab="${tab.id}">${tab.label}</button>
+                `).join('')}
             </div>
 
             <div class="planner-content">
-                ${currentTab === 'tasks' ? renderTasksView(dayTasks) :
-                  currentTab === 'matrix' ? renderMatrixView(dayTasks) :
-                  renderPomodoroView(settings)}
+                ${currentTab === 'tasks' ? renderTasksView(dayTasks, simpleMode, focusTaskId) :
+                    currentTab === 'matrix' ? renderMatrixView(dayTasks) :
+                        renderPomodoroView(settings, dayTasks, focusTaskId)}
             </div>
         </div>
     `;
 
-    // Tab listeners
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
             currentTab = btn.dataset.tab;
             render();
         });
     });
 
-    // Date nav
     document.getElementById('prev-day')?.addEventListener('click', () => {
         const d = new Date(selectedDate + 'T12:00:00');
         d.setDate(d.getDate() - 1);
@@ -65,32 +135,42 @@ export function render() {
         render();
     });
 
-    // Add task
-    document.getElementById('add-task-btn')?.addEventListener('click', showAddTaskForm);
-    document.getElementById('add-task-empty')?.addEventListener('click', showAddTaskForm);
+    document.getElementById('add-task-btn')?.addEventListener('click', () => showAddTaskForm(simpleMode));
+    document.getElementById('add-task-empty')?.addEventListener('click', () => showAddTaskForm(simpleMode));
 
-    // Task checkboxes
-    document.querySelectorAll('.task-check').forEach(cb => {
+    document.querySelectorAll('.task-check').forEach((cb) => {
         cb.addEventListener('click', () => toggleTask(cb.dataset.id));
     });
 
-    // Task delete
-    document.querySelectorAll('.task-delete').forEach(btn => {
+    document.querySelectorAll('.task-delete').forEach((btn) => {
         btn.addEventListener('click', () => deleteTask(btn.dataset.id));
     });
+    document.querySelectorAll('.task-edit').forEach((btn) => {
+        btn.addEventListener('click', () => showEditTaskForm(btn.dataset.id));
+    });
+    document.querySelectorAll('.task-pomo-focus').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const nextFocusId = btn.dataset.id || null;
+            const currentFocus = getPomodoroFocusTaskId(selectedDate);
+            setPomodoroFocusTaskId(currentFocus === nextFocusId ? null : nextFocusId, selectedDate);
+            render();
+        });
+    });
 
-    // Pomodoro controls
     document.getElementById('pomo-start')?.addEventListener('click', startPomodoro);
     document.getElementById('pomo-pause')?.addEventListener('click', pausePomodoro);
     document.getElementById('pomo-reset')?.addEventListener('click', resetPomodoro);
+    document.getElementById('pomo-task-select')?.addEventListener('change', (e) => {
+        setPomodoroFocusTaskId(e.target.value || null, selectedDate);
+        render();
+    });
 
-    // Eisenhower matrix task checks
-    document.querySelectorAll('.task-check-sm').forEach(cb => {
+    document.querySelectorAll('.task-check-sm').forEach((cb) => {
         cb.addEventListener('click', () => toggleTask(cb.dataset.id));
     });
 }
 
-function renderTasksView(tasks) {
+function renderTasksView(tasks, simpleMode, focusTaskId) {
     const sorted = [...tasks].sort((a, b) => {
         if (a.completed !== b.completed) return a.completed ? 1 : -1;
         return (a.timeStart || '99:99').localeCompare(b.timeStart || '99:99');
@@ -98,19 +178,20 @@ function renderTasksView(tasks) {
 
     return `
         <div class="tasks-view">
-            <button class="btn btn-primary btn-sm" id="add-task-btn" style="margin-bottom:12px">+ Nueva Tarea</button>
+            <button class="btn btn-primary btn-sm" id="add-task-btn" style="margin-bottom:12px">Nueva tarea</button>
+            ${simpleMode ? '<p class="text-secondary" style="margin-bottom:12px;font-size:0.85rem">Menos opciones, más ejecución: define lo esencial y empieza.</p>' : ''}
             ${!tasks.length ? `
                 <div class="empty-state glass-card">
-                    <p class="empty-icon">&#128197;</p>
-                    <h3>Planifica tu d\u00eda</h3>
-                    <p>La corteza prefrontal funciona mejor con estructura. Asigna tiempo espec\u00edfico a cada tarea para activar la intenci\u00f3n de implementaci\u00f3n.</p>
-                    <button class="btn btn-primary" id="add-task-empty">+ Crear tarea</button>
+                    <p class="empty-state-kicker">Planifica tu día</p>
+                    <h3>Define tu siguiente acción</h3>
+                    <p>Las tareas claras reducen la fatiga de decisión y facilitan la ejecución.</p>
+                    <button class="btn btn-primary" id="add-task-empty">Crear tarea</button>
                 </div>
             ` : ''}
             <div class="tasks-list">
-                ${sorted.map(t => `
+                ${sorted.map((t) => `
                     <div class="task-item glass-card ${t.completed ? 'task-done' : ''} ${t.urgent && t.important ? 'task-critical' : ''}">
-                        <button class="task-check ${t.completed ? 'checked' : ''}" data-id="${t.id}">
+                        <button class="task-check ${t.completed ? 'checked' : ''}" data-id="${t.id}" aria-label="Completar tarea">
                             ${t.completed ? '&#10003;' : ''}
                         </button>
                         <div class="task-info">
@@ -119,10 +200,27 @@ function renderTasksView(tasks) {
                                 ${t.timeStart ? `<span class="task-time">${t.timeStart}${t.timeEnd ? ' - ' + t.timeEnd : ''}</span>` : ''}
                                 ${t.important ? '<span class="tag tag-important">Importante</span>' : ''}
                                 ${t.urgent ? '<span class="tag tag-urgent">Urgente</span>' : ''}
-                                ${t.pomodorosEstimated ? `<span class="tag tag-pomo">&#127813; ${t.pomodorosCompleted || 0}/${t.pomodorosEstimated}</span>` : ''}
+                                ${t.pomodorosEstimated ? `<span class="tag tag-pomo">Pomos ${t.pomodorosCompleted || 0}/${t.pomodorosEstimated}</span>` : ''}
+                                ${focusTaskId === t.id ? '<span class="tag tag-focus">En foco</span>' : ''}
                             </div>
+                            ${t.pomodorosEstimated ? `
+                                <div class="task-pomo-progress">
+                                    <div class="task-pomo-track">
+                                        <div class="task-pomo-fill" style="width:${Math.min(100, Math.round(((t.pomodorosCompleted || 0) / t.pomodorosEstimated) * 100))}%"></div>
+                                    </div>
+                                    <span class="task-pomo-text">${Math.min(100, Math.round(((t.pomodorosCompleted || 0) / t.pomodorosEstimated) * 100))}%</span>
+                                </div>
+                            ` : ''}
                         </div>
-                        <button class="btn-icon task-delete" data-id="${t.id}">&#128465;</button>
+                        ${!t.completed ? `
+                            <button class="btn-icon task-pomo-focus ${focusTaskId === t.id ? 'is-active' : ''}" data-id="${t.id}" aria-label="Poner tarea en foco" title="${focusTaskId === t.id ? 'Quitar foco' : 'Poner en foco'}">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+                            </button>
+                        ` : ''}
+                        <button class="btn-icon task-edit" data-id="${t.id}" aria-label="Editar tarea" title="Editar tarea">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
+                        <button class="btn-icon task-delete" data-id="${t.id}" aria-label="Eliminar tarea">&times;</button>
                     </div>
                 `).join('')}
             </div>
@@ -131,14 +229,14 @@ function renderTasksView(tasks) {
 }
 
 function renderMatrixView(tasks) {
-    const q1 = tasks.filter(t => t.urgent && t.important);
-    const q2 = tasks.filter(t => !t.urgent && t.important);
-    const q3 = tasks.filter(t => t.urgent && !t.important);
-    const q4 = tasks.filter(t => !t.urgent && !t.important);
+    const q1 = tasks.filter((t) => t.urgent && t.important);
+    const q2 = tasks.filter((t) => !t.urgent && t.important);
+    const q3 = tasks.filter((t) => t.urgent && !t.important);
+    const q4 = tasks.filter((t) => !t.urgent && !t.important);
 
-    const renderQuadrant = (items) => items.map(t => `
+    const renderQuadrant = (items) => items.map((t) => `
         <div class="matrix-task ${t.completed ? 'task-done' : ''}">
-            <button class="task-check-sm ${t.completed ? 'checked' : ''}" data-id="${t.id}">${t.completed ? '&#10003;' : ''}</button>
+            <button class="task-check-sm ${t.completed ? 'checked' : ''}" data-id="${t.id}" aria-label="Completar tarea">${t.completed ? '&#10003;' : ''}</button>
             <span>${t.title}</span>
         </div>
     `).join('') || '<p class="text-secondary" style="font-size:0.8rem">Sin tareas</p>';
@@ -146,52 +244,86 @@ function renderMatrixView(tasks) {
     return `
         <div class="eisenhower-matrix">
             <div class="matrix-labels-top">
-                <span></span><span class="matrix-label">Urgente</span><span class="matrix-label">No Urgente</span>
+                <span></span><span class="matrix-label">Urgente</span><span class="matrix-label">No urgente</span>
             </div>
             <div class="matrix-grid">
                 <div class="matrix-label-side">Importante</div>
                 <div class="matrix-quadrant q1 glass-card">
-                    <h4>&#128308; HACER</h4>
+                    <h4>Hacer</h4>
                     ${renderQuadrant(q1)}
                 </div>
                 <div class="matrix-quadrant q2 glass-card">
-                    <h4>&#128309; PLANIFICAR</h4>
+                    <h4>Planificar</h4>
                     ${renderQuadrant(q2)}
                 </div>
-                <div class="matrix-label-side">No Importante</div>
+                <div class="matrix-label-side">No importante</div>
                 <div class="matrix-quadrant q3 glass-card">
-                    <h4>&#128992; DELEGAR</h4>
+                    <h4>Delegar</h4>
                     ${renderQuadrant(q3)}
                 </div>
                 <div class="matrix-quadrant q4 glass-card">
-                    <h4>&#9899; ELIMINAR</h4>
+                    <h4>Eliminar</h4>
                     ${renderQuadrant(q4)}
                 </div>
             </div>
             <p class="matrix-tip text-secondary" style="margin-top:12px;font-size:0.85rem">
-                &#128161; Consejo: Invierte la mayor\u00eda del tiempo en Q2 (Planificar). Es donde ocurre el crecimiento real. - Stephen Covey
+                Prioriza el cuadrante de planificación para reducir urgencias futuras.
             </p>
         </div>
     `;
 }
 
-function renderPomodoroView(settings) {
+function renderPomodoroView(settings, dayTasks, focusTaskId) {
+    const focusCandidates = dayTasks.filter((task) => !task.completed);
+    const focusedTask = focusCandidates.find((task) => task.id === focusTaskId) || null;
+    const focusProgress = focusedTask && focusedTask.pomodorosEstimated
+        ? Math.min(100, Math.round(((focusedTask.pomodorosCompleted || 0) / focusedTask.pomodorosEstimated) * 100))
+        : 0;
     const totalSeconds = pomodoroState.running || pomodoroState.timeLeft > 0
         ? pomodoroState.timeLeft
         : settings.workMinutes * 60;
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     const maxSeconds = pomodoroState.mode === 'work' ? settings.workMinutes * 60 :
-                       pomodoroState.mode === 'shortBreak' ? settings.shortBreakMinutes * 60 :
-                       settings.longBreakMinutes * 60;
+        pomodoroState.mode === 'shortBreak' ? settings.shortBreakMinutes * 60 :
+            settings.longBreakMinutes * 60;
     const progress = maxSeconds > 0 ? ((maxSeconds - totalSeconds) / maxSeconds) : 0;
     const circumference = 2 * Math.PI * 140;
+    const modeLabel = pomodoroState.mode === 'work'
+        ? 'Trabajo'
+        : pomodoroState.mode === 'shortBreak'
+            ? 'Descanso corto'
+            : 'Descanso largo';
 
     return `
         <div class="pomodoro-view">
-            <div class="pomo-mode-label ${pomodoroState.mode === 'work' ? 'pomo-work' : 'pomo-break'}">
-                ${pomodoroState.mode === 'work' ? '&#128293; Trabajo' : pomodoroState.mode === 'shortBreak' ? '&#9749; Descanso Corto' : '&#127796; Descanso Largo'}
+            <div class="glass-card pomo-task-panel">
+                <label for="pomo-task-select" class="pomo-task-label">Tarea foco de esta sesion</label>
+                <select id="pomo-task-select" class="pomo-task-select">
+                    <option value="">Sin vincular</option>
+                    ${focusCandidates.map((task) => `
+                        <option value="${task.id}" ${focusTaskId === task.id ? 'selected' : ''}>
+                            ${task.title}${task.pomodorosEstimated ? ` (${task.pomodorosCompleted || 0}/${task.pomodorosEstimated})` : ''}
+                        </option>
+                    `).join('')}
+                </select>
+                ${focusedTask ? `
+                    <div class="pomo-task-meta">
+                        <span class="pomo-task-title">${focusedTask.title}</span>
+                        ${focusedTask.pomodorosEstimated
+                            ? `<span class="pomo-task-ratio">${focusedTask.pomodorosCompleted || 0}/${focusedTask.pomodorosEstimated} pomodoros</span>`
+                            : '<span class="pomo-task-ratio">Sin estimacion definida</span>'
+                        }
+                    </div>
+                    ${focusedTask.pomodorosEstimated ? `
+                        <div class="pomo-task-progress">
+                            <div class="pomo-task-progress-fill" style="width:${focusProgress}%"></div>
+                        </div>
+                    ` : ''}
+                ` : '<p class="pomo-task-empty">Selecciona una tarea para registrar automaticamente cada sesion de trabajo.</p>'}
             </div>
+
+            <div class="pomo-mode-label ${pomodoroState.mode === 'work' ? 'pomo-work' : 'pomo-break'}">${modeLabel}</div>
             <div class="pomo-timer">
                 <svg viewBox="0 0 300 300" class="pomo-circle">
                     <circle cx="150" cy="150" r="140" fill="none" stroke="var(--bg-tertiary)" stroke-width="10"/>
@@ -206,22 +338,38 @@ function renderPomodoroView(settings) {
             </div>
             <div class="pomo-controls">
                 ${!pomodoroState.running ? `
-                    <button class="btn btn-primary btn-lg" id="pomo-start">&#9654; ${pomodoroState.timeLeft > 0 ? 'Continuar' : 'Iniciar'}</button>
+                    <button class="btn btn-primary btn-lg" id="pomo-start">${pomodoroState.timeLeft > 0 ? 'Continuar' : 'Iniciar'}</button>
                 ` : `
-                    <button class="btn btn-warning btn-lg" id="pomo-pause">&#10074;&#10074; Pausar</button>
+                    <button class="btn btn-warning btn-lg" id="pomo-pause">Pausar</button>
                 `}
-                <button class="btn btn-ghost btn-lg" id="pomo-reset">&#8634; Reiniciar</button>
+                <button class="btn btn-ghost btn-lg" id="pomo-reset">Reiniciar</button>
             </div>
             <div class="pomo-sessions">
                 <span>Sesiones completadas: <strong>${pomodoroState.sessions}</strong></span>
             </div>
             <div class="pomo-science glass-card" style="margin-top:20px;padding:12px">
                 <p class="text-secondary" style="font-size:0.85rem">
-                    &#129504; <strong>Neurociencia:</strong> Tu corteza prefrontal tiene energ\u00eda limitada. Los intervalos de 25 min con descansos mantienen el rendimiento cognitivo \u00f3ptimo y previenen la fatiga de decisi\u00f3n.
+                    Intervalos cortos de enfoque sostienen energía mental y reducen saturación.
                 </p>
             </div>
         </div>
     `;
+}
+
+function incrementPomodoroForActiveTask() {
+    if (!pomodoroState.activeTaskId || !pomodoroState.activeDate) return;
+    const tasks = getPlannerTasks();
+    const task = tasks.find((item) => item.id === pomodoroState.activeTaskId && item.date === pomodoroState.activeDate);
+    if (!task) return;
+
+    task.pomodorosCompleted = Math.max(0, (task.pomodorosCompleted || 0) + 1);
+    store.set('planner.tasks', tasks);
+
+    if (task.pomodorosEstimated > 0 && task.pomodorosCompleted >= task.pomodorosEstimated) {
+        showToast(`Pomodoros de "${task.title}" completados. Puedes marcar la tarea como hecha.`);
+    } else {
+        showToast(`+1 pomodoro en "${task.title}" (${task.pomodorosCompleted}/${task.pomodorosEstimated || '-'})`);
+    }
 }
 
 function startPomodoro() {
@@ -229,6 +377,10 @@ function startPomodoro() {
     if (pomodoroState.timeLeft <= 0) {
         pomodoroState.timeLeft = settings.workMinutes * 60;
         pomodoroState.mode = 'work';
+    }
+    if (pomodoroState.mode === 'work' && !pomodoroState.activeTaskId) {
+        pomodoroState.activeTaskId = getPomodoroFocusTaskId(selectedDate);
+        pomodoroState.activeDate = selectedDate;
     }
     pomodoroState.running = true;
     pomodoroState.endTime = Date.now() + pomodoroState.timeLeft * 1000;
@@ -251,15 +403,20 @@ function startPomodoro() {
             playSound('pomodoro');
 
             if (pomodoroState.mode === 'work') {
+                incrementPomodoroForActiveTask();
                 pomodoroState.sessions++;
                 const isLongBreak = pomodoroState.sessions % settings.longBreakAfter === 0;
                 pomodoroState.mode = isLongBreak ? 'longBreak' : 'shortBreak';
                 pomodoroState.timeLeft = isLongBreak ? settings.longBreakMinutes * 60 : settings.shortBreakMinutes * 60;
-                showToast(`\u00a1Sesi\u00f3n ${pomodoroState.sessions} completada! ${isLongBreak ? 'Toma un descanso largo.' : 'Descanso corto.'}`);
+                pomodoroState.activeTaskId = null;
+                pomodoroState.activeDate = null;
+                showToast(`Sesión ${pomodoroState.sessions} completada. ${isLongBreak ? 'Descanso largo.' : 'Descanso corto.'}`);
             } else {
                 pomodoroState.mode = 'work';
                 pomodoroState.timeLeft = settings.workMinutes * 60;
-                showToast('\u00a1De vuelta al trabajo! Tu cerebro est\u00e1 recargado.');
+                pomodoroState.activeTaskId = null;
+                pomodoroState.activeDate = null;
+                showToast('Listo para la siguiente sesión de enfoque.');
             }
             render();
         }
@@ -278,59 +435,89 @@ function resetPomodoro() {
     pomodoroState.running = false;
     pomodoroState.timeLeft = 0;
     pomodoroState.mode = 'work';
+    pomodoroState.activeTaskId = null;
+    pomodoroState.activeDate = null;
     if (pomodoroState.interval) clearInterval(pomodoroState.interval);
     render();
 }
 
-function showAddTaskForm() {
+function showAddTaskForm(simpleMode = isSimpleMode()) {
     const formHtml = `
         <form id="task-form" class="form">
             <div class="form-group">
                 <label>Tarea</label>
-                <input type="text" id="task-title" placeholder="Ej: Preparar presentaci\u00f3n" required>
+                <input type="text" id="task-title" placeholder="Ej: Preparar presentación" required>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>Hora inicio</label>
                     <input type="time" id="task-start">
                 </div>
-                <div class="form-group">
-                    <label>Hora fin</label>
-                    <input type="time" id="task-end">
+                <div class="form-group check-toggle-row">
+                    <label class="check-toggle" for="task-important">
+                        <input type="checkbox" id="task-important">
+                        <span>Importante</span>
+                    </label>
                 </div>
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label><input type="checkbox" id="task-important"> Importante</label>
-                </div>
-                <div class="form-group">
-                    <label><input type="checkbox" id="task-urgent"> Urgente</label>
-                </div>
-            </div>
+
             <div class="form-group">
-                <label>Pomodoros estimados</label>
-                <input type="number" id="task-pomos" min="0" max="20" value="0">
+                <label class="check-toggle check-toggle-advanced" for="task-advanced-toggle">
+                    <input type="checkbox" id="task-advanced-toggle" ${simpleMode ? '' : 'checked'}>
+                    <span>Mostrar opciones avanzadas</span>
+                </label>
             </div>
-            <button type="submit" class="btn btn-primary btn-block">Agregar Tarea</button>
+
+            <div id="task-advanced-fields" style="display:${simpleMode ? 'none' : 'block'}">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Hora fin</label>
+                        <input type="time" id="task-end">
+                    </div>
+                    <div class="form-group check-toggle-row">
+                        <label class="check-toggle" for="task-urgent">
+                            <input type="checkbox" id="task-urgent">
+                            <span>Urgente</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Pomodoros estimados</label>
+                    <input type="number" id="task-pomos" min="0" max="20" value="0">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Agregar tarea</button>
         </form>
     `;
 
-    showModal('Nueva Tarea', formHtml);
-    document.getElementById('task-form').addEventListener('submit', (e) => {
+    showModal('Nueva tarea', formHtml);
+
+    const advancedToggle = document.getElementById('task-advanced-toggle');
+    const advancedFields = document.getElementById('task-advanced-fields');
+    advancedToggle?.addEventListener('change', () => {
+        if (!advancedFields) return;
+        advancedFields.style.display = advancedToggle.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('task-form')?.addEventListener('submit', (e) => {
         e.preventDefault();
+        const showAdvanced = document.getElementById('task-advanced-toggle')?.checked;
         const task = {
             id: generateId(),
             date: selectedDate,
             title: document.getElementById('task-title').value.trim(),
             timeStart: document.getElementById('task-start').value || null,
-            timeEnd: document.getElementById('task-end').value || null,
+            timeEnd: showAdvanced ? (document.getElementById('task-end').value || null) : null,
             important: document.getElementById('task-important').checked,
-            urgent: document.getElementById('task-urgent').checked,
-            pomodorosEstimated: parseInt(document.getElementById('task-pomos').value) || 0,
+            urgent: showAdvanced ? document.getElementById('task-urgent').checked : false,
+            pomodorosEstimated: showAdvanced ? (parseInt(document.getElementById('task-pomos').value, 10) || 0) : 0,
             pomodorosCompleted: 0,
             completed: false
         };
-        const tasks = store.get('planner.tasks') || [];
+
+        if (!task.title) return;
+        const tasks = getPlannerTasks();
         tasks.push(task);
         store.set('planner.tasks', tasks);
         closeModal();
@@ -339,24 +526,94 @@ function showAddTaskForm() {
     });
 }
 
-function toggleTask(taskId) {
-    const tasks = store.get('planner.tasks') || [];
-    const task = tasks.find(t => t.id === taskId);
-    if (task) {
-        task.completed = !task.completed;
-        store.set('planner.tasks', tasks);
-        if (task.completed) {
-            playSound('complete');
-            addXP(XP.TASK_COMPLETE);
-            checkAchievements();
+function showEditTaskForm(taskId) {
+    const tasks = getPlannerTasks();
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const formHtml = `
+        <form id="edit-task-form" class="form">
+            <div class="form-group">
+                <label>Tarea</label>
+                <input type="text" id="edit-task-title" value="${task.title || ''}" required>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Hora inicio</label>
+                    <input type="time" id="edit-task-start" value="${task.timeStart || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Hora fin</label>
+                    <input type="time" id="edit-task-end" value="${task.timeEnd || ''}">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group check-toggle-row">
+                    <label class="check-toggle" for="edit-task-important">
+                        <input type="checkbox" id="edit-task-important" ${task.important ? 'checked' : ''}>
+                        <span>Importante</span>
+                    </label>
+                </div>
+                <div class="form-group check-toggle-row">
+                    <label class="check-toggle" for="edit-task-urgent">
+                        <input type="checkbox" id="edit-task-urgent" ${task.urgent ? 'checked' : ''}>
+                        <span>Urgente</span>
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Pomodoros estimados</label>
+                <input type="number" id="edit-task-pomos" min="0" max="20" value="${task.pomodorosEstimated || 0}">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Guardar cambios</button>
+        </form>
+    `;
+
+    showModal('Editar tarea', formHtml);
+    document.getElementById('edit-task-form')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        task.title = document.getElementById('edit-task-title').value.trim();
+        if (!task.title) return;
+        task.timeStart = document.getElementById('edit-task-start').value || null;
+        task.timeEnd = document.getElementById('edit-task-end').value || null;
+        task.important = document.getElementById('edit-task-important').checked;
+        task.urgent = document.getElementById('edit-task-urgent').checked;
+        task.pomodorosEstimated = parseInt(document.getElementById('edit-task-pomos').value, 10) || 0;
+        if (task.pomodorosEstimated > 0) {
+            task.pomodorosCompleted = Math.min(task.pomodorosCompleted || 0, task.pomodorosEstimated);
         }
+
+        store.set('planner.tasks', tasks);
+        closeModal();
+        showToast('Tarea actualizada');
         render();
+    });
+}
+
+function toggleTask(taskId) {
+    const tasks = getPlannerTasks();
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    task.completed = !task.completed;
+    store.set('planner.tasks', tasks);
+    if (task.completed) {
+        playSound('complete');
+        addXP(XP.TASK_COMPLETE);
+        checkAchievements();
+        if (getPomodoroFocusTaskId(selectedDate) === task.id) {
+            setPomodoroFocusTaskId(null, selectedDate);
+        }
     }
+    render();
 }
 
 function deleteTask(taskId) {
-    const tasks = store.get('planner.tasks') || [];
-    store.set('planner.tasks', tasks.filter(t => t.id !== taskId));
+    const tasks = getPlannerTasks();
+    store.set('planner.tasks', tasks.filter((t) => t.id !== taskId));
+    if (getPomodoroFocusTaskId(selectedDate) === taskId) {
+        setPomodoroFocusTaskId(null, selectedDate);
+    }
     render();
 }
 

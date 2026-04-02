@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+  <defs>
+    <linearGradient id="grad5" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FA7921;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F7931B;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="24" fill="url(#grad5)"/>
+  <!-- Head -->
+  <circle cx="48" cy="28" r="14" fill="#fff"/>
+  <!-- Body -->
+  <ellipse cx="48" cy="56" rx="16" ry="18" fill="#fff"/>
+  <!-- Scale/Balance symbol on chest -->
+  <path d="M48 48 L48 58 M38 54 L58 54" stroke="#FA7921" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <circle cx="45" cy="50" r="2.5" fill="#FA7921"/>
+  <circle cx="51" cy="50" r="2.5" fill="#FA7921"/>
+  <!-- Arms in balanced pose -->
+  <path d="M35 48 L28 45" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M61 48 L68 45" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- Legs -->
+  <path d="M42 70 L40 85" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M54 70 L56 85" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- Calm face -->
+  <circle cx="45" cy="26" r="2" fill="#FA7921"/>
+  <circle cx="51" cy="26" r="2" fill="#FA7921"/>
+  <path d="M46 30 Q48 31 50 30" stroke="#FA7921" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+</svg>

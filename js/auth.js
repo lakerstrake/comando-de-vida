@@ -34,7 +34,10 @@ function decodeJWT(token) {
 }
 
 function onAuthSuccess(user) {
-    if (user.name) store.set('settings.userName', user.name);
+    const savedName = (store.get('settings.userName') || '').trim();
+    if (!savedName && user.name) {
+        store.set('settings.userName', user.name);
+    }
     const loginScreen = document.getElementById('login-screen');
     const app         = document.getElementById('app');
     if (loginScreen) loginScreen.style.display = 'none';
