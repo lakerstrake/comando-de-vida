@@ -1,5 +1,5 @@
 // Service Worker - Comando Vida 2.0
-const CACHE_NAME = 'comando-vida-v10';
+const CACHE_NAME = 'comando-vida-v11';
 const ASSETS = [
     './',
     './index.html',
@@ -20,6 +20,7 @@ const ASSETS = [
     './js/firebase-config.js',
     './js/profile.js',
     './js/config.js',
+    './js/gamification.js',
     './manifest.json'
 ];
 

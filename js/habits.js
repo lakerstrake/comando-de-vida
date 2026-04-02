@@ -1,6 +1,7 @@
 // habits.js - Habit Tracker module
 import { store } from './store.js';
 import { generateId, today, formatDate, getStreakForHabit, getBestStreakForHabit, streakLevel, streakMilestoneMsg, showToast, showModal, closeModal, playSound, animateReward, createConfetti, CATEGORIES } from './ui.js';
+import { addXP, checkAchievements, XP } from './gamification.js';
 
 let currentView = 'list'; // list | heatmap
 
@@ -195,6 +196,19 @@ function toggleHabit(habitId) {
         records[habitId] = streak;
         store.set('stats.streakRecords', records);
     }
+
+    // Award XP: base + streak bonus
+    const streakBonus = Math.min(streak * XP.HABIT_STREAK_BONUS, 30);
+    addXP(XP.HABIT_COMPLETE + streakBonus);
+
+    // Bonus XP if all habits done today
+    const activeHabits = (store.get('habits.items') || []).filter(h => !h.archived);
+    const todayDone = completions[todayStr] || [];
+    if (activeHabits.every(h => todayDone.includes(h.id))) {
+        addXP(XP.ALL_HABITS_DONE);
+    }
+
+    checkAchievements();
 
     // Milestone message
     const milestoneMsg = streakMilestoneMsg(streak);

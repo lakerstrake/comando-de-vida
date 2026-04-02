@@ -1,6 +1,7 @@
 // planner.js - Daily Planner module with Pomodoro & Eisenhower Matrix
 import { store } from './store.js';
 import { generateId, today, formatDate, formatDateDisplay, showToast, showModal, closeModal, playSound } from './ui.js';
+import { addXP, checkAchievements, XP } from './gamification.js';
 
 let currentTab = 'tasks'; // tasks | matrix | pomodoro
 let pomodoroState = { running: false, timeLeft: 0, mode: 'work', sessions: 0, interval: null, endTime: null };
@@ -344,7 +345,11 @@ function toggleTask(taskId) {
     if (task) {
         task.completed = !task.completed;
         store.set('planner.tasks', tasks);
-        if (task.completed) playSound('complete');
+        if (task.completed) {
+            playSound('complete');
+            addXP(XP.TASK_COMPLETE);
+            checkAchievements();
+        }
         render();
     }
 }

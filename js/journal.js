@@ -1,6 +1,7 @@
 // journal.js - Journal module (gratitude, reflection, mood)
 import { store } from './store.js';
 import { generateId, today, formatDate, formatDateDisplay, showToast, playSound, MOODS } from './ui.js';
+import { addXP, checkAchievements, XP } from './gamification.js';
 
 let selectedDate = today();
 
@@ -215,9 +216,11 @@ function attachListeners(entry, entries) {
         } else {
             allEntries.push(newEntry);
         }
+        const isNew = allEntries.findIndex(e => e.date === selectedDate) < 0 || idx < 0;
         store.set('journal.entries', allEntries);
+        if (isNew) { addXP(XP.JOURNAL_ENTRY); checkAchievements(); }
         playSound('complete');
-        showToast('Entrada guardada. Tu cerebro te agradece la reflexi\u00f3n.');
+        showToast('Entrada guardada. Tu cerebro te agradece la reflexión.');
     });
 }
 

@@ -36,6 +36,13 @@ const DEFAULT_DATA = {
     stats: {
         lifeScore: [],
         streakRecords: {}
+    },
+    gamification: {
+        xp: 0,
+        level: 1,
+        achievements: [],
+        totalXPEarned: 0,
+        achievementDates: {}
     }
 };
 

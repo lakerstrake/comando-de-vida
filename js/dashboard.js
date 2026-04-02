@@ -1,6 +1,7 @@
 // dashboard.js - Dashboard module
 import { store } from './store.js';
 import { today, formatDateDisplay, getStreakForHabit, getBestStreakForHabit, getAppStreak, streakLevel, CATEGORIES, QUOTES } from './ui.js';
+import { getLevelInfo, getLevelProgress, getNextLevel } from './gamification.js';
 
 export function render() {
     const container = document.getElementById('main-content');
@@ -36,6 +37,13 @@ export function render() {
 
     const appStreak = getAppStreak(completions);
 
+    // XP / Level
+    const gam      = store.get('gamification') || { xp: 0 };
+    const xp       = gam.xp || 0;
+    const level    = getLevelInfo(xp);
+    const nextLvl  = getNextLevel(xp);
+    const xpPct    = getLevelProgress(xp);
+
     // Time-based greeting
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Buenos d\u00edas' : hour < 18 ? 'Buenas tardes' : 'Buenas noches';
@@ -52,6 +60,15 @@ export function render() {
                     <h1>${greeting}, ${userName}</h1>
                     <p class="text-secondary">${formatDateDisplay(todayStr)}${isFreshStart ? ' &mdash; Nuevo ciclo, nueva oportunidad' : ''}</p>
                 </div>
+                <a href="#/profile" class="dash-level-badge" title="Ver perfil y logros">
+                    <span class="dash-level-icon">${level.icon}</span>
+                    <div class="dash-level-info">
+                        <span class="dash-level-name">Niv.${level.level} · ${level.name}</span>
+                        <div class="dash-xp-bar">
+                            <div class="dash-xp-fill" style="width:${xpPct}%;background:${level.color}"></div>
+                        </div>
+                    </div>
+                </a>
             </div>
 
             <div class="quote-card glass-card">
