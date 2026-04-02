@@ -1,25 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
   <defs>
-    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#4ECDC4;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#44B0B0;stop-opacity:1" />
+    <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00BCD4"/>
+      <stop offset="100%" stop-color="#0097A7"/>
     </linearGradient>
   </defs>
-  <rect width="96" height="96" rx="24" fill="url(#grad2)"/>
-  <!-- Head -->
-  <circle cx="48" cy="28" r="14" fill="#fff"/>
-  <!-- Body with heart symbol -->
-  <ellipse cx="48" cy="56" rx="16" ry="18" fill="#fff"/>
-  <!-- Heart on chest -->
-  <path d="M48 50 L52 46 Q54 44 56 46 Q58 48 56 52 Q54 54 48 58 Q42 54 40 52 Q38 48 40 46 Q42 44 44 46 Z" fill="#4ECDC4"/>
-  <!-- Arms up in celebration -->
-  <path d="M35 48 L28 35" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
-  <path d="M61 48 L68 35" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
-  <!-- Legs -->
-  <path d="M42 70 L40 85" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
-  <path d="M54 70 L56 85" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
-  <!-- Happy face -->
-  <circle cx="45" cy="26" r="2" fill="#4ECDC4"/>
-  <circle cx="51" cy="26" r="2" fill="#4ECDC4"/>
-  <path d="M45 29 Q48 31 51 29" stroke="#4ECDC4" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <rect width="96" height="96" rx="24" fill="url(#g2)"/>
+  <circle cx="48" cy="32" r="16" fill="#fff"/>
+  <circle cx="44" cy="30" r="2.5" fill="#00BCD4"/>
+  <circle cx="52" cy="30" r="2.5" fill="#00BCD4"/>
+  <path d="M45 35 Q48 37 51 35" stroke="#00BCD4" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <ellipse cx="48" cy="58" rx="18" ry="20" fill="#fff"/>
+  <path d="M48 50 C44.5 53 43 55 48 62 C53 55 51.5 53 48 50 Z" fill="#00BCD4"/>
+  <path d="M35 48 L28 38" stroke="#fff" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <path d="M61 48 L68 38" stroke="#fff" stroke-width="4" stroke-linecap="round" fill="none"/>
 </svg>
