@@ -1,7 +1,6 @@
 // app.js - Main application entry point and router
 import { store } from './store.js';
 import { showToast, showModal, closeModal, escapeHtml } from './ui.js';
-import { aiAssistant } from './ai-assistant.js';
 import { auth } from './auth.js';
 import { loadDefaultTemplates } from './templates.js';
 import * as dashboard from './dashboard.js';
@@ -156,7 +155,6 @@ window.__onAuthReady = function(user) {
     loadDefaultTemplates(store);
 
     // Update user display in sidebar
-    const userName = user?.name || store.get('settings.userName') || '';
     if (user?.name && !store.get('settings.userName')) {
         store.set('settings.userName', user.name);
     }
