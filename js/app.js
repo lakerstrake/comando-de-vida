@@ -13,6 +13,7 @@ import * as stats from './stats.js';
 import * as review from './review.js';
 import * as profile from './profile.js';
 import * as brief from './daily-brief.js';
+import * as evening from './evening-reflection.js';
 
 const routes = {
     '/dashboard': dashboard,
@@ -24,7 +25,8 @@ const routes = {
     '/stats': stats,
     '/review': review,
     '/profile': profile,
-    '/brief': brief
+    '/brief': brief,
+    '/evening': evening
 };
 
 let currentModule = null;
@@ -172,11 +174,15 @@ window.__onAuthReady = function(user) {
     // Router
     window.addEventListener('hashchange', handleRoute);
 
-    // Show Daily Brief on first open of the day (unless already navigating somewhere)
+    // Routing logic: brief in AM, evening reflection in PM
     const hash = window.location.hash.slice(1);
     if (!hash || hash === '/' || hash === '/dashboard') {
         if (!brief.wasSeenToday()) {
             window.location.hash = '#/brief';
+            return;
+        }
+        if (evening.shouldShow()) {
+            window.location.hash = '#/evening';
             return;
         }
     }
