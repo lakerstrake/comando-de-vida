@@ -12,6 +12,7 @@ import * as lifewheel from './lifewheel.js';
 import * as stats from './stats.js';
 import * as review from './review.js';
 import * as profile from './profile.js';
+import * as brief from './daily-brief.js';
 
 const routes = {
     '/dashboard': dashboard,
@@ -22,7 +23,8 @@ const routes = {
     '/lifewheel': lifewheel,
     '/stats': stats,
     '/review': review,
-    '/profile': profile
+    '/profile': profile,
+    '/brief': brief
 };
 
 let currentModule = null;
@@ -169,6 +171,15 @@ window.__onAuthReady = function(user) {
 
     // Router
     window.addEventListener('hashchange', handleRoute);
+
+    // Show Daily Brief on first open of the day (unless already navigating somewhere)
+    const hash = window.location.hash.slice(1);
+    if (!hash || hash === '/' || hash === '/dashboard') {
+        if (!brief.wasSeenToday()) {
+            window.location.hash = '#/brief';
+            return;
+        }
+    }
     handleRoute();
 };
 
