@@ -1,6 +1,6 @@
 // habits.js - Habit Tracker module
 import { store } from './store.js';
-import { generateId, today, formatDate, getStreakForHabit, showToast, showModal, closeModal, playSound, animateReward, createConfetti, CATEGORIES } from './ui.js';
+import { generateId, today, formatDate, getStreakForHabit, getBestStreakForHabit, streakLevel, streakMilestoneMsg, showToast, showModal, closeModal, playSound, animateReward, createConfetti, CATEGORIES } from './ui.js';
 
 let currentView = 'list'; // list | heatmap
 
@@ -22,36 +22,50 @@ export function render() {
     const totalDone = activeHabits.filter(h => todayCompletions.includes(h.id)).length;
     const totalActive = activeHabits.length;
     const pct = totalActive ? Math.round((totalDone / totalActive) * 100) : 0;
+    const pending = totalActive - totalDone;
+
+    // Streak-at-risk: after 19:00 with pending habits
+    const hour = new Date().getHours();
+    const riskBanner = (hour >= 19 && pending > 0 && totalActive > 0) ? `
+        <div class="streak-risk-banner">
+            <span class="streak-risk-icon">⚠️</span>
+            <div>
+                <strong>Rachas en riesgo</strong>
+                <span>Tienes ${pending} hábito${pending > 1 ? 's' : ''} sin completar hoy. No pierdas tu racha.</span>
+            </div>
+        </div>` : '';
 
     container.innerHTML = `
         <div class="habits-page">
             <div class="page-header">
-                <h1>H\u00e1bitos</h1>
+                <h1>Hábitos</h1>
                 <div class="header-actions">
-                    <button class="btn btn-sm btn-ghost" onclick="window.habitsToggleView()">${currentView === 'list' ? '&#9638; Heatmap' : '&#9776; Lista'}</button>
-                    <button class="btn btn-primary btn-sm" id="add-habit-btn">+ Nuevo H\u00e1bito</button>
+                    <button class="btn btn-sm btn-ghost" onclick="window.habitsToggleView()">${currentView === 'list' ? '⊞ Heatmap' : '☰ Lista'}</button>
+                    <button class="btn btn-primary btn-sm" id="add-habit-btn">+ Nuevo Hábito</button>
                 </div>
             </div>
+
+            ${riskBanner}
 
             <div class="glass-card habit-progress-card">
                 <div class="habit-progress-info">
                     <span class="habit-progress-text">Progreso de hoy</span>
-                    <span class="habit-progress-count">${totalDone}/${totalActive} (${pct}%)</span>
+                    <span class="habit-progress-count">${totalDone}/${totalActive} · ${pct}%</span>
                 </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${pct}%"></div>
+                <div class="progress-bar" style="margin:10px 0 4px">
+                    <div class="progress-fill" style="width:${pct}%;transition:width 0.6s ease"></div>
                 </div>
-                ${pct === 100 && totalActive > 0 ? '<p class="all-done-msg">&#127881; \u00a1Todos los h\u00e1bitos completados! Tu cerebro te lo agradece.</p>' : ''}
+                ${pct === 100 && totalActive > 0 ? '<p class="all-done-msg">🎉 ¡Todos completados! Tu cerebro te lo agradece.</p>' : ''}
             </div>
 
             ${currentView === 'list' ? renderListView(grouped, todayCompletions, completions) : renderHeatmapView(activeHabits, completions)}
 
             ${!activeHabits.length ? `
                 <div class="empty-state glass-card">
-                    <p class="empty-icon">&#9876;</p>
-                    <h3>Empieza tu transformaci\u00f3n</h3>
-                    <p>Los h\u00e1bitos son el pilar del \u00e9xito. La neurociencia muestra que repetir una acci\u00f3n 66 d\u00edas promedio crea una v\u00eda neuronal autom\u00e1tica.</p>
-                    <button class="btn btn-primary" id="add-habit-empty">+ Crear primer h\u00e1bito</button>
+                    <p class="empty-icon">🎯</p>
+                    <h3>Empieza tu transformación</h3>
+                    <p>La neurociencia muestra que repetir una acción 66 días crea una vía neuronal automática. Tu primer hábito es el más importante.</p>
+                    <button class="btn btn-primary" id="add-habit-empty">+ Crear primer hábito</button>
                 </div>
             ` : ''}
         </div>
@@ -91,26 +105,38 @@ function renderListView(grouped, todayCompletions, completions) {
         const catInfo = CATEGORIES[cat];
         html += `
             <div class="habit-category">
-                <h3 class="category-header" style="color: ${catInfo.color}">
+                <h3 class="category-header" style="color:${catInfo.color}">
                     <span>${catInfo.icon}</span> ${catInfo.name}
                 </h3>
                 <div class="habits-list">
                     ${habits.map(h => {
                         const done = todayCompletions.includes(h.id);
                         const streak = getStreakForHabit(h.id, completions);
+                        const best = getBestStreakForHabit(h.id, completions);
+                        const lvl = streakLevel(streak);
+                        const streakHtml = streak > 0 ? `
+                            <div class="streak-pill streak-${lvl}">
+                                <span class="streak-flame">${streak >= 66 ? '💜' : streak >= 30 ? '🔥' : streak >= 7 ? '🔥' : '🔥'}</span>
+                                <span class="streak-num">${streak}</span>
+                                ${best > streak ? `<span class="streak-rec">/ ${best}</span>` : ''}
+                            </div>` : '<div class="streak-pill streak-zero">—</div>';
                         return `
-                            <div class="habit-item glass-card ${done ? 'habit-done' : ''}" ${h.stackAfter ? 'style="margin-left: 24px; border-left: 2px solid ' + catInfo.color + '"' : ''}>
-                                <button class="habit-check ${done ? 'checked' : ''}" data-id="${h.id}" style="--cat-color: ${catInfo.color}">
-                                    ${done ? '&#10003;' : ''}
+                            <div class="habit-item glass-card ${done ? 'habit-done' : ''}" ${h.stackAfter ? `style="margin-left:20px;border-left:3px solid ${catInfo.color}"` : ''}>
+                                <button class="habit-check ${done ? 'checked' : ''}" data-id="${h.id}" style="--cat-color:${catInfo.color}" aria-label="Completar hábito">
+                                    ${done ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>` : ''}
                                 </button>
                                 <div class="habit-info">
                                     <span class="habit-name">${h.name}</span>
-                                    ${h.cue ? `<span class="habit-cue">&#128279; ${h.cue}</span>` : ''}
+                                    ${h.cue ? `<span class="habit-cue">↳ ${h.cue}</span>` : ''}
                                 </div>
                                 <div class="habit-meta">
-                                    ${streak > 0 ? `<span class="streak-badge ${streak >= 30 ? 'streak-fire' : streak >= 7 ? 'streak-hot' : ''}">${streak} &#128293;</span>` : ''}
-                                    <button class="btn-icon habit-edit" data-id="${h.id}" title="Editar">&#9998;</button>
-                                    <button class="btn-icon habit-delete" data-id="${h.id}" title="Eliminar">&#128465;</button>
+                                    ${streakHtml}
+                                    <button class="btn-icon habit-edit" data-id="${h.id}" title="Editar">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                    </button>
+                                    <button class="btn-icon habit-delete" data-id="${h.id}" title="Eliminar">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                                    </button>
                                 </div>
                             </div>
                         `;
@@ -155,30 +181,42 @@ function toggleHabit(habitId) {
 
     if (todayCompletions.includes(habitId)) {
         completions[todayStr] = todayCompletions.filter(id => id !== habitId);
+        store.set('habits.completions', completions);
+        render();
+        return;
+    }
+
+    completions[todayStr] = [...todayCompletions, habitId];
+    const streak = getStreakForHabit(habitId, completions);
+
+    // Save best streak record
+    const records = store.get('stats.streakRecords') || {};
+    if (!records[habitId] || streak > records[habitId]) {
+        records[habitId] = streak;
+        store.set('stats.streakRecords', records);
+    }
+
+    // Milestone message
+    const milestoneMsg = streakMilestoneMsg(streak);
+    const isMilestone = [1, 3, 7, 14, 21, 30, 60, 66, 100, 200, 365].includes(streak);
+
+    if (isMilestone && milestoneMsg) {
+        playSound('streak');
+        showToast(milestoneMsg, 'success');
+        if (streak >= 7) createConfetti(document.body);
+        if (streak >= 7) animateReward(document.querySelector(`[data-id="${habitId}"]`));
+    } else if (Math.random() < 0.12) {
+        // Variable reward: 12% chance of dopamine message
+        const bonusMsgs = [
+            '¡Racha activa! Cada repetición fortalece la sinapsis.',
+            '¡Constancia es poder! Tu cerebro está aprendiendo.',
+            '¡Hábito registrado! La disciplina es libertad.',
+            '¡Cada día cuenta! Estás construyendo tu mejor versión.'
+        ];
+        showToast(bonusMsgs[Math.floor(Math.random() * bonusMsgs.length)], 'success');
+        playSound('complete');
     } else {
-        completions[todayStr] = [...todayCompletions, habitId];
-        const streak = getStreakForHabit(habitId, completions);
-
-        // Variable reward (1 in 5 chance)
-        if (Math.random() < 0.2) {
-            showToast('\u00a1Bonus! Tu cerebro acaba de liberar dopamina extra.', 'success');
-        }
-
-        if (streak === 7) {
-            playSound('streak');
-            showToast('\u00a17 d\u00edas seguidos! La v\u00eda neuronal se est\u00e1 formando.', 'success');
-            createConfetti(document.body);
-        } else if (streak === 30) {
-            playSound('streak');
-            showToast('\u00a130 d\u00edas! Este h\u00e1bito se est\u00e1 volviendo autom\u00e1tico.', 'success');
-            createConfetti(document.body);
-        } else if (streak === 66) {
-            playSound('streak');
-            showToast('\u00a166 d\u00edas! Seg\u00fan la ciencia, ya es parte de ti.', 'success');
-            createConfetti(document.body);
-        } else {
-            playSound('complete');
-        }
+        playSound('complete');
     }
 
     store.set('habits.completions', completions);

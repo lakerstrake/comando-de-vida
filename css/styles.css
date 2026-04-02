@@ -1566,6 +1566,135 @@ h1, h2, h3, h4 {
     flex-shrink: 0;
 }
 
+/* ===== STREAK PILL (habits & dashboard) ===== */
+.streak-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px 2px 5px;
+    border-radius: 20px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    background: rgba(100,116,139,0.1);
+    color: var(--text-muted);
+    transition: transform 0.2s;
+}
+.streak-pill .streak-flame { font-size: 0.75rem; line-height: 1; }
+.streak-pill .streak-num   { font-size: 0.75rem; line-height: 1; }
+.streak-pill .streak-rec   { font-size: 0.625rem; color: var(--text-muted); margin-left: 2px; }
+
+/* Level: warm (3-6 days) */
+.streak-warm {
+    background: rgba(251,191,36,0.12);
+    color: #b45309;
+}
+[data-theme="dark"] .streak-warm { color: #fbbf24; background: rgba(251,191,36,0.15); }
+
+/* Level: hot (7-29 days) */
+.streak-hot {
+    background: rgba(249,115,22,0.12);
+    color: #c2410c;
+    animation: streakPulse 2.5s ease-in-out infinite;
+}
+[data-theme="dark"] .streak-hot { color: #fb923c; background: rgba(249,115,22,0.18); }
+
+/* Level: fire (30-65 days) */
+.streak-fire {
+    background: rgba(239,68,68,0.12);
+    color: #b91c1c;
+    animation: streakPulse 1.8s ease-in-out infinite;
+}
+[data-theme="dark"] .streak-fire { color: #f87171; background: rgba(239,68,68,0.18); }
+
+/* Level: legendary (66+ days) */
+.streak-legendary {
+    background: linear-gradient(90deg, rgba(139,92,246,0.15), rgba(79,70,229,0.15));
+    color: #7c3aed;
+    animation: legendaryPulse 2s ease-in-out infinite;
+    border: 1px solid rgba(139,92,246,0.25);
+}
+[data-theme="dark"] .streak-legendary { color: #a78bfa; }
+
+/* Zero streak */
+.streak-zero {
+    color: var(--text-muted);
+    background: transparent;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+}
+
+@keyframes streakPulse {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.05); }
+}
+@keyframes legendaryPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0); transform: scale(1); }
+    50%       { box-shadow: 0 0 8px 2px rgba(139,92,246,0.3); transform: scale(1.04); }
+}
+
+/* ===== STREAK AT-RISK BANNER ===== */
+.streak-risk-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(239,68,68,0.06);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: var(--radius-lg);
+    margin-bottom: 16px;
+    animation: cardEnter 0.3s ease-out;
+}
+.streak-risk-icon { font-size: 1.25rem; flex-shrink: 0; margin-top: 1px; }
+.streak-risk-banner strong {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #b91c1c;
+    margin-bottom: 2px;
+}
+[data-theme="dark"] .streak-risk-banner strong { color: #f87171; }
+.streak-risk-banner span {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+/* ===== DASHBOARD STREAKS CARD ===== */
+.streaks-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.streaks-header .card-heading { margin-bottom: 0; }
+
+.app-streak-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    background: rgba(249,115,22,0.1);
+    border: 1px solid rgba(249,115,22,0.2);
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #c2410c;
+}
+[data-theme="dark"] .app-streak-badge { color: #fb923c; background: rgba(249,115,22,0.15); }
+
+.streak-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.streak-best-label {
+    font-size: 0.625rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Legacy badge kept for compat */
 .streak-badge {
     font-size: 0.6875rem;
     font-weight: 600;

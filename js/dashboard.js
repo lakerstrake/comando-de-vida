@@ -1,6 +1,6 @@
 // dashboard.js - Dashboard module
 import { store } from './store.js';
-import { today, formatDateDisplay, getStreakForHabit, CATEGORIES, QUOTES, showToast, playSound, createConfetti } from './ui.js';
+import { today, formatDateDisplay, getStreakForHabit, getBestStreakForHabit, getAppStreak, streakLevel, CATEGORIES, QUOTES } from './ui.js';
 
 export function render() {
     const container = document.getElementById('main-content');
@@ -24,12 +24,17 @@ export function render() {
     const goalProgress = activeGoals.length ? activeGoals.reduce((sum, g) => sum + g.progress, 0) / activeGoals.length : 0;
     const lifeScore = Math.round(habitRate * 0.4 + taskRate * 0.3 + goalProgress * 0.3);
 
-    // Get top streaks
+    // Get top streaks with records
+    const streakRecords = store.get('stats.streakRecords') || {};
     const streaks = activeHabits.map(h => ({
+        id: h.id,
         name: h.name,
         category: h.category,
-        streak: getStreakForHabit(h.id, completions)
+        streak: getStreakForHabit(h.id, completions),
+        best: Math.max(getBestStreakForHabit(h.id, completions), streakRecords[h.id] || 0)
     })).filter(s => s.streak > 0).sort((a, b) => b.streak - a.streak).slice(0, 5);
+
+    const appStreak = getAppStreak(completions);
 
     // Time-based greeting
     const hour = new Date().getHours();
@@ -100,19 +105,37 @@ export function render() {
                 </div>
             </div>
 
-            ${streaks.length ? `
             <div class="glass-card streaks-card">
-                <h3 class="card-heading">Rachas Activas</h3>
-                <div class="streaks-list">
-                    ${streaks.map(s => `
-                        <div class="streak-item">
-                            <span class="streak-category" style="color: ${CATEGORIES[s.category]?.color || '#fff'}">${CATEGORIES[s.category]?.icon || ''}</span>
-                            <span class="streak-name">${s.name}</span>
-                            <span class="streak-count ${s.streak >= 30 ? 'streak-fire' : s.streak >= 7 ? 'streak-hot' : ''}">${s.streak} d\u00edas</span>
-                        </div>
-                    `).join('')}
+                <div class="streaks-header">
+                    <h3 class="card-heading">Rachas</h3>
+                    ${appStreak > 0 ? `
+                    <div class="app-streak-badge">
+                        <span>🔥</span>
+                        <span>${appStreak} día${appStreak !== 1 ? 's' : ''} activo${appStreak !== 1 ? 's' : ''}</span>
+                    </div>` : ''}
                 </div>
-            </div>` : ''}
+                ${streaks.length ? `
+                <div class="streaks-list">
+                    ${streaks.map(s => {
+                        const lvl = streakLevel(s.streak);
+                        const flame = s.streak >= 66 ? '💜' : s.streak >= 30 ? '🔥' : s.streak >= 7 ? '🔥' : '🔥';
+                        return `
+                        <div class="streak-item">
+                            <span class="streak-category" style="color:${CATEGORIES[s.category]?.color || '#6366f1'}">${CATEGORIES[s.category]?.icon || ''}</span>
+                            <span class="streak-name">${s.name}</span>
+                            <div class="streak-right">
+                                <span class="streak-pill streak-${lvl}" style="display:inline-flex">
+                                    <span>${flame}</span>
+                                    <span class="streak-num">${s.streak}</span>
+                                </span>
+                                ${s.best > s.streak ? `<span class="streak-best-label">rec. ${s.best}</span>` : ''}
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>` : `
+                <p class="text-secondary" style="font-size:0.8125rem;margin-top:8px">Completa hábitos para construir rachas.</p>`}
+                <a href="#/habits" class="card-link" style="margin-top:12px;display:inline-block">Ver hábitos →</a>
+            </div>
 
             <div class="dashboard-actions">
                 <a href="#/habits" class="action-btn glass-card">

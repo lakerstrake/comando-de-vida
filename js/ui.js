@@ -146,6 +146,65 @@ export function getStreakForHabit(habitId, completions) {
     return streak;
 }
 
+/** Best (all-time longest) streak for a habit across full history */
+export function getBestStreakForHabit(habitId, completions) {
+    const dates = Object.keys(completions)
+        .filter(d => (completions[d] || []).includes(habitId))
+        .sort();
+    if (!dates.length) return 0;
+    let best = 1, current = 1;
+    for (let i = 1; i < dates.length; i++) {
+        const diff = (new Date(dates[i]) - new Date(dates[i - 1])) / 86400000;
+        if (Math.round(diff) === 1) { current++; best = Math.max(best, current); }
+        else current = 1;
+    }
+    return best;
+}
+
+/** Consecutive days the user has completed at least 1 habit (app-level streak) */
+export function getAppStreak(completions) {
+    let streak = 0;
+    const d = new Date();
+    while (true) {
+        const dateStr = formatDate(d);
+        if ((completions[dateStr] || []).length > 0) {
+            streak++;
+            d.setDate(d.getDate() - 1);
+        } else {
+            if (streak === 0 && dateStr === today()) { d.setDate(d.getDate() - 1); continue; }
+            break;
+        }
+    }
+    return streak;
+}
+
+/** Returns CSS level class for a streak number */
+export function streakLevel(n) {
+    if (n >= 66) return 'legendary';
+    if (n >= 30) return 'fire';
+    if (n >= 7)  return 'hot';
+    if (n >= 3)  return 'warm';
+    return '';
+}
+
+/** Milestone message for a streak */
+export function streakMilestoneMsg(streak) {
+    const milestones = {
+        1:   '¡Primer día! El viaje comienza ahora.',
+        3:   '¡3 días! El patrón empieza a formarse.',
+        7:   '¡7 días! Tu cerebro está creando nuevas conexiones neuronales.',
+        14:  '¡2 semanas! La mielinización está en marcha.',
+        21:  '¡21 días! A un tercio de automatizarlo para siempre.',
+        30:  '¡Un mes! Este hábito está grabado en tu corteza prefrontal.',
+        60:  '¡60 días! Ya forma parte de tu identidad.',
+        66:  '¡66 días! La ciencia confirma: ya es automático.',
+        100: '¡100 días! Eres una persona fundamentalmente diferente.',
+        200: '¡200 días! Eres un maestro de la disciplina.',
+        365: '¡Un año completo! Leyenda absoluta.'
+    };
+    return milestones[streak] || null;
+}
+
 export function getDaysBetween(date1, date2) {
     const d1 = new Date(date1);
     const d2 = new Date(date2);
