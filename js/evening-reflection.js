@@ -20,156 +20,126 @@ export function shouldShow() {
 export function render() {
     const container = document.getElementById('main-content');
     const todayStr = today();
-    const habits = (store.get('habits.items') || []).filter((habit) => !habit.archived);
+    const habits = (store.get('habits.items') || []).filter(h => !h.archived);
     const completions = store.get('habits.completions') || {};
     const tasks = store.get('planner.tasks') || [];
     const entries = store.get('journal.entries') || [];
 
     const todayDone = completions[todayStr] || [];
-    const habitsDone = habits.filter((habit) => todayDone.includes(habit.id)).length;
+    const habitsDone = habits.filter(h => todayDone.includes(h.id)).length;
     const habitsPct = habits.length ? Math.round((habitsDone / habits.length) * 100) : 0;
+    const todayTasks = tasks.filter(t => t.date === todayStr);
+    const tasksDone = todayTasks.filter(t => t.completed).length;
+    const existing = entries.find(e => e.date === todayStr);
 
-    const todayTasks = tasks.filter((task) => task.date === todayStr);
-    const tasksDone = todayTasks.filter((task) => task.completed).length;
-    const tasksPct = todayTasks.length ? Math.round((tasksDone / todayTasks.length) * 100) : 0;
-
-    const existingEntry = entries.find((entry) => entry.date === todayStr);
     const topStreaks = habits
-        .map((habit) => ({ name: habit.name, streak: _calcStreak(habit.id, completions) }))
-        .filter((entry) => entry.streak > 0)
+        .map(h => ({ name: h.name, streak: _calcStreak(h.id, completions) }))
+        .filter(e => e.streak > 0)
         .sort((a, b) => b.streak - a.streak)
         .slice(0, 2);
 
     container.innerHTML = `
-        <div class="evening-page">
-            <div class="evening-header">
-                <div class="evening-moon">${icon('moon', 28, 'moon-icon')}</div>
-                <h1 class="evening-title">Reflexion Nocturna</h1>
-                <p class="evening-subtitle">2 minutos para cerrar el dia con intencion</p>
+        <div class="ev-page">
+            <div class="ev-header">
+                <div class="ev-moon">${icon('moon', 26, 'moon-icon')}</div>
+                <h1>Reflexión Nocturna</h1>
+                <p class="text-secondary">2 minutos para cerrar el día con intención</p>
             </div>
 
-            <div class="glass-card evening-summary">
-                <h3 class="card-heading" style="margin-bottom:14px">Tu dia de hoy</h3>
-                <div class="evening-stats">
-                    <div class="evening-stat">
-                        <div class="evening-stat-circle" style="--pct:${habitsPct}">
-                            <svg viewBox="0 0 36 36" class="evening-circle-svg">
-                                <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--bg-tertiary)" stroke-width="3"></circle>
+            <!-- Day summary -->
+            <div class="ev-block">
+                <p class="ev-block-label">Tu día</p>
+                <div class="ev-stats-row">
+                    <div class="ev-stat">
+                        <div class="ev-stat-circle">
+                            <svg viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--bg-tertiary)" stroke-width="3"/>
                                 <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--accent-primary)" stroke-width="3"
-                                    stroke-dasharray="${Math.round(habitsPct)} ${100 - Math.round(habitsPct)}"
-                                    stroke-linecap="round" transform="rotate(-90 18 18)"></circle>
+                                    stroke-dasharray="${habitsPct} ${100 - habitsPct}" stroke-linecap="round" transform="rotate(-90 18 18)"/>
                             </svg>
                             <span>${habitsPct}%</span>
                         </div>
-                        <p class="evening-stat-label">Habitos<br><strong>${habitsDone}/${habits.length}</strong></p>
+                        <p class="ev-stat-label">Hábitos<br><strong>${habitsDone}/${habits.length}</strong></p>
                     </div>
-                    <div class="evening-stat">
-                        <div class="evening-stat-circle" style="--pct:${tasksPct}">
-                            <svg viewBox="0 0 36 36" class="evening-circle-svg">
-                                <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--bg-tertiary)" stroke-width="3"></circle>
-                                <circle cx="18" cy="18" r="15.9" fill="none" stroke="#0a8f6a" stroke-width="3"
-                                    stroke-dasharray="${Math.round(tasksPct)} ${100 - Math.round(tasksPct)}"
-                                    stroke-linecap="round" transform="rotate(-90 18 18)"></circle>
+                    ${todayTasks.length ? `
+                    <div class="ev-stat">
+                        <div class="ev-stat-circle">
+                            <svg viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--bg-tertiary)" stroke-width="3"/>
+                                <circle cx="18" cy="18" r="15.9" fill="none" stroke="#10b981" stroke-width="3"
+                                    stroke-dasharray="${todayTasks.length ? Math.round(tasksDone/todayTasks.length*100) : 0} ${100 - (todayTasks.length ? Math.round(tasksDone/todayTasks.length*100) : 0)}" stroke-linecap="round" transform="rotate(-90 18 18)"/>
                             </svg>
-                            <span>${tasksPct}%</span>
+                            <span>${todayTasks.length ? Math.round(tasksDone/todayTasks.length*100) : 0}%</span>
                         </div>
-                        <p class="evening-stat-label">Tareas<br><strong>${tasksDone}/${todayTasks.length}</strong></p>
-                    </div>
+                        <p class="ev-stat-label">Tareas<br><strong>${tasksDone}/${todayTasks.length}</strong></p>
+                    </div>` : ''}
                     ${topStreaks.length ? `
-                    <div class="evening-streak-highlight">
-                        ${topStreaks.map((entry) => `
-                            <div class="evening-streak-row">
-                                <span class="evening-streak-flame">${icon('flame', 13, 'streak-icon')}</span>
-                                <div>
-                                    <span class="evening-streak-name">${escapeHtml(entry.name)}</span>
-                                    <span class="evening-streak-days">${entry.streak} dias</span>
-                                </div>
+                    <div class="ev-streaks">
+                        ${topStreaks.map(s => `
+                            <div class="ev-streak-row">
+                                ${icon('flame', 12, 'streak-icon')}
+                                <span>${escapeHtml(s.name)}</span>
+                                <strong>${s.streak}d</strong>
                             </div>`).join('')}
                     </div>` : ''}
                 </div>
-
-                ${habitsPct === 100 ? `<p class="evening-perfect">${icon('check', 13, 'streak-icon')} Dia completo. Todos los habitos fueron completados.</p>` : ''}
+                ${habitsPct === 100 ? `<p class="ev-perfect">${icon('check', 12, '')} Día completo. Todos los hábitos completados.</p>` : ''}
             </div>
 
-            <form class="glass-card evening-form" id="evening-form">
-                <h3 class="card-heading" style="margin-bottom:16px">3 preguntas rapidas</h3>
-
-                <div class="evening-question">
-                    <label class="evening-q-label">
-                        <span class="evening-q-num">01</span>
-                        Que salio bien hoy?
-                    </label>
-                    <textarea class="evening-textarea" id="ev-went-well" rows="2"
-                        placeholder="Algo pequeno o grande... todo cuenta"
-                        maxlength="300">${existingEntry?.eveningReflection?.wentWell || ''}</textarea>
+            <!-- Questions -->
+            <form id="ev-form">
+                <div class="ev-block">
+                    <p class="ev-block-label"><span class="ev-num">01</span> ¿Qué salió bien hoy?</p>
+                    <textarea id="ev-well" rows="2" placeholder="Algo pequeño o grande... todo cuenta" maxlength="300">${existing?.eveningReflection?.wentWell || ''}</textarea>
                 </div>
 
-                <div class="evening-question">
-                    <label class="evening-q-label">
-                        <span class="evening-q-num">02</span>
-                        Que harias diferente manana?
-                    </label>
-                    <textarea class="evening-textarea" id="ev-improve" rows="2"
-                        placeholder="Una sola cosa que cambiarias"
-                        maxlength="300">${existingEntry?.eveningReflection?.improve || ''}</textarea>
+                <div class="ev-block">
+                    <p class="ev-block-label"><span class="ev-num">02</span> ¿Qué harías diferente mañana?</p>
+                    <textarea id="ev-improve" rows="2" placeholder="Una sola cosa que cambiarías" maxlength="300">${existing?.eveningReflection?.improve || ''}</textarea>
                 </div>
 
-                <div class="evening-question">
-                    <label class="evening-q-label">
-                        <span class="evening-q-num">03</span>
-                        Como fue tu energia hoy?
-                    </label>
-                    <div class="energy-meter" id="energy-meter">
-                        ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => `
-                            <button type="button" class="energy-dot ${existingEntry?.eveningReflection?.energy === val ? 'active' : ''}"
-                                data-val="${val}" title="${val}">${val}</button>`).join('')}
+                <div class="ev-block">
+                    <p class="ev-block-label"><span class="ev-num">03</span> ¿Cómo fue tu energía hoy?</p>
+                    <div class="ev-energy-row" id="ev-energy-row">
+                        ${[1,2,3,4,5,6,7,8,9,10].map(v => `
+                            <button type="button" class="ev-energy-dot ${(existing?.eveningReflection?.energy || 0) >= v ? 'active' : ''}" data-val="${v}">${v}</button>`).join('')}
                     </div>
-                    <div class="energy-labels">
-                        <span>Sin energia</span>
-                        <span>Maxima energia</span>
+                    <div class="ev-energy-labels">
+                        <span class="text-muted">Sin energía</span>
+                        <span class="text-muted">Máxima energía</span>
                     </div>
                 </div>
 
-                <input type="hidden" id="ev-energy-val" value="${existingEntry?.eveningReflection?.energy || ''}">
-
-                <button type="submit" class="btn brief-cta" style="margin-top:8px">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Cerrar el dia
-                </button>
+                <button type="submit" class="btn btn-primary btn-block">Cerrar el día</button>
             </form>
 
-            <button class="brief-skip" id="ev-skip-btn">Omitir por hoy</button>
+            <button class="btn btn-ghost btn-block ev-skip" id="ev-skip">Omitir por hoy</button>
         </div>
     `;
 
-    let selectedEnergy = existingEntry?.eveningReflection?.energy || 0;
-    document.querySelectorAll('.energy-dot').forEach((btn) => {
+    let selectedEnergy = existing?.eveningReflection?.energy || 0;
+    document.querySelectorAll('.ev-energy-dot').forEach(btn => {
         btn.addEventListener('click', () => {
             selectedEnergy = parseInt(btn.dataset.val, 10);
-            document.getElementById('ev-energy-val').value = selectedEnergy;
-            document.querySelectorAll('.energy-dot').forEach((dot) => {
-                dot.classList.toggle('active', parseInt(dot.dataset.val, 10) <= selectedEnergy);
+            document.querySelectorAll('.ev-energy-dot').forEach(d => {
+                d.classList.toggle('active', parseInt(d.dataset.val, 10) <= selectedEnergy);
             });
         });
     });
 
-    document.getElementById('evening-form')?.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const wentWell = document.getElementById('ev-went-well')?.value.trim();
-        const improve = document.getElementById('ev-improve')?.value.trim();
-        const energy = selectedEnergy || parseInt(document.getElementById('ev-energy-val')?.value, 10) || 0;
-
-        const reflection = { wentWell, improve, energy, savedAt: new Date().toISOString() };
-        const allEntries = store.get('journal.entries') || [];
-        const idx = allEntries.findIndex((entry) => entry.date === todayStr);
-        if (idx >= 0) {
-            allEntries[idx].eveningReflection = reflection;
-            allEntries[idx].updatedAt = new Date().toISOString();
-        } else {
-            allEntries.push({ date: todayStr, eveningReflection: reflection, createdAt: new Date().toISOString() });
-        }
-        store.set('journal.entries', allEntries);
-
+    document.getElementById('ev-form')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const reflection = {
+            wentWell: document.getElementById('ev-well').value.trim(),
+            improve: document.getElementById('ev-improve').value.trim(),
+            energy: selectedEnergy,
+            savedAt: new Date().toISOString()
+        };
+        const all = store.get('journal.entries') || [];
+        const idx = all.findIndex(e => e.date === todayStr);
+        if (idx >= 0) { all[idx].eveningReflection = reflection; all[idx].updatedAt = new Date().toISOString(); }
+        else all.push({ date: todayStr, eveningReflection: reflection, createdAt: new Date().toISOString() });
+        store.set('journal.entries', all);
         markSeen();
         addXP(20);
         checkAchievements();
@@ -177,28 +147,25 @@ export function render() {
         _showCongrats(habitsPct);
     });
 
-    document.getElementById('ev-skip-btn')?.addEventListener('click', () => {
+    document.getElementById('ev-skip')?.addEventListener('click', () => {
         markSeen();
         window.location.hash = '#/dashboard';
     });
 }
 
 function _showCongrats(habitsPct) {
-    const message = habitsPct === 100
-        ? 'Dia perfecto. Manana, a repetirlo.'
-        : habitsPct >= 75
-            ? 'Buen cierre de jornada. Cada accion cuenta.'
-            : 'Manana es una nueva oportunidad. Descansa bien.';
-
+    const msg = habitsPct === 100 ? 'Día perfecto. Mañana, a repetirlo.'
+        : habitsPct >= 75 ? 'Buen cierre de jornada. Cada acción cuenta.'
+        : 'Mañana es una nueva oportunidad. Descansa bien.';
     const overlay = document.createElement('div');
     overlay.className = 'levelup-overlay';
     overlay.innerHTML = `
         <div class="levelup-card">
-            <div class="levelup-icon">${icon('moon', 30, 'moon-icon')}</div>
-            <p class="levelup-sub">Reflexion guardada - +20 XP</p>
-            <h2 class="levelup-title" style="font-size:1.5rem">Dia cerrado</h2>
-            <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:20px">${message}</p>
-            <button class="btn btn-primary levelup-close" style="width:100%"
+            <div class="levelup-icon">${icon('moon', 28, 'moon-icon')}</div>
+            <p class="levelup-sub">Reflexión guardada — +20 XP</p>
+            <h2 class="levelup-title">Día cerrado</h2>
+            <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:20px">${msg}</p>
+            <button class="btn btn-primary" style="width:100%"
                 onclick="this.closest('.levelup-overlay').remove();window.location.hash='#/dashboard'">
                 Ir al dashboard
             </button>
@@ -212,15 +179,11 @@ function _calcStreak(habitId, completions) {
     const d = new Date();
     const todayStr = today();
     while (true) {
-        const dateStr = d.toISOString().split('T')[0];
-        if ((completions[dateStr] || []).includes(habitId)) {
-            streak++;
-            d.setDate(d.getDate() - 1);
+        const ds = d.toISOString().split('T')[0];
+        if ((completions[ds] || []).includes(habitId)) {
+            streak++; d.setDate(d.getDate() - 1);
         } else {
-            if (streak === 0 && dateStr === todayStr) {
-                d.setDate(d.getDate() - 1);
-                continue;
-            }
+            if (streak === 0 && ds === todayStr) { d.setDate(d.getDate() - 1); continue; }
             break;
         }
     }

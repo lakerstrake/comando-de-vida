@@ -14,6 +14,7 @@ import * as review from './review.js';
 import * as profile from './profile.js';
 import * as brief from './daily-brief.js';
 import * as evening from './evening-reflection.js';
+import * as wellbeing from './wellbeing.js';
 
 const routes = {
     '/dashboard': dashboard,
@@ -26,7 +27,8 @@ const routes = {
     '/review': review,
     '/profile': profile,
     '/brief': brief,
-    '/evening': evening
+    '/evening': evening,
+    '/wellbeing': wellbeing
 };
 
 let currentModule = null;

@@ -1,193 +1,151 @@
-// habits.js - Habit Tracker module
+// habits.js - Clean minimal habit tracker
 import { store } from './store.js';
-import { generateId, today, formatDate, getStreakForHabit, getBestStreakForHabit, streakLevel, streakMilestoneMsg, showToast, showModal, closeModal, playSound, animateReward, createConfetti, CATEGORIES, icon } from './ui.js';
+import { generateId, today, formatDate, getStreakForHabit, getBestStreakForHabit, streakMilestoneMsg, showToast, showModal, closeModal, playSound, animateReward, createConfetti, CATEGORIES, icon } from './ui.js';
 import { addXP, checkAchievements, XP } from './gamification.js';
 
-let currentView = 'list'; // list | heatmap
+let currentView = 'list';
 
-function cleanHabitText(value, fallback = '') {
-    if (value == null) return fallback;
-    const text = String(value).trim();
-    if (!text || text.toLowerCase() === 'undefined' || text.toLowerCase() === 'null') return fallback;
-    return text;
+function cleanText(val, fallback = '') {
+    const t = String(val ?? '').trim();
+    return (!t || t === 'undefined' || t === 'null') ? fallback : t;
 }
 
 export function render() {
     const container = document.getElementById('main-content');
-    const habits = store.get('habits.items') || [];
+    const habits = (store.get('habits.items') || []).filter(h => !h.archived);
     const completions = store.get('habits.completions') || {};
     const todayStr = today();
-    const todayCompletions = completions[todayStr] || [];
-    const activeHabits = habits.filter((habit) => !habit.archived);
+    const todayDone = completions[todayStr] || [];
 
-    const grouped = {};
-    for (const category of Object.keys(CATEGORIES)) {
-        const categoryHabits = activeHabits.filter((habit) => habit.category === category);
-        if (categoryHabits.length) grouped[category] = categoryHabits;
-    }
-    const uncategorizedHabits = activeHabits.filter((habit) => !CATEGORIES[habit.category]);
-    if (uncategorizedHabits.length) grouped.misc = uncategorizedHabits;
+    const totalDone = habits.filter(h => todayDone.includes(h.id)).length;
+    const pct = habits.length ? Math.round((totalDone / habits.length) * 100) : 0;
+    const allDone = habits.length > 0 && totalDone === habits.length;
 
-    const totalDone = activeHabits.filter((habit) => todayCompletions.includes(habit.id)).length;
-    const totalActive = activeHabits.length;
-    const pct = totalActive ? Math.round((totalDone / totalActive) * 100) : 0;
-    const pending = totalActive - totalDone;
-
+    const pending = habits.filter(h => !todayDone.includes(h.id));
+    const done = habits.filter(h => todayDone.includes(h.id));
     const hour = new Date().getHours();
-    const riskBanner = (hour >= 19 && pending > 0 && totalActive > 0) ? `
-        <div class="streak-risk-banner">
-            <span class="streak-risk-icon">${icon('bolt', 14, 'risk-icon')}</span>
-            <div>
-                <strong>Rachas en riesgo</strong>
-                <span>Tienes ${pending} habito${pending > 1 ? 's' : ''} sin completar hoy. Protege tu consistencia.</span>
-            </div>
-        </div>` : '';
+    const showRisk = hour >= 19 && pending.length > 0;
 
     container.innerHTML = `
-        <div class="habits-page">
-            <div class="page-header">
-                <h1>Habitos</h1>
-                <div class="header-actions">
-                    <button class="btn btn-sm btn-ghost" id="toggle-view-btn">${currentView === 'list' ? `${icon('target', 12, 'inline-icon')} Heatmap` : `${icon('sparkle', 12, 'inline-icon')} Lista`}</button>
-                    <button class="btn btn-primary btn-sm" id="add-habit-btn">+ Nuevo habito</button>
+        <div class="hb-page">
+            <div class="hb-header">
+                <h1>Hábitos</h1>
+                <div class="hb-header-actions">
+                    <button class="btn btn-sm btn-ghost" id="hb-toggle-view">
+                        ${currentView === 'list' ? 'Heatmap' : 'Lista'}
+                    </button>
+                    <button class="btn btn-primary btn-sm" id="hb-add">+ Nuevo</button>
                 </div>
             </div>
 
-            ${riskBanner}
-
-            <div class="glass-card habit-progress-card">
-                <div class="habit-progress-info">
-                    <span class="habit-progress-text">Progreso de hoy</span>
-                    <span class="habit-progress-count">${totalDone}/${totalActive} - ${pct}%</span>
-                </div>
-                <div class="progress-bar" style="margin:10px 0 4px">
-                    <div class="progress-fill" style="width:${pct}%;transition:width 0.6s ease"></div>
-                </div>
-                ${pct === 100 && totalActive > 0 ? `<p class="all-done-msg">${icon('check', 13, 'inline-icon')} Todos completados. Excelente disciplina.</p>` : ''}
+            ${habits.length > 0 ? `
+            <div class="hb-progress-bar-wrap">
+                <div class="hb-progress-bar-fill ${allDone ? 'all-done' : ''}" style="width:${pct}%"></div>
             </div>
-
-            ${currentView === 'list' ? renderListView(grouped, todayCompletions, completions) : renderHeatmapView(activeHabits, completions)}
-
-            ${!activeHabits.length ? `
-                <div class="empty-state glass-card">
-                    <p class="empty-icon">${icon('target', 22, 'empty-icon-svg')}</p>
-                    <h3>Empieza tu transformacion</h3>
-                    <p>Repetir una accion de forma consistente acelera la automatizacion del habito. Comienza con uno.</p>
-                    <button class="btn btn-primary" id="add-habit-empty">+ Crear primer habito</button>
-                </div>
+            <div class="hb-progress-label">
+                <span class="${allDone ? 'text-success' : 'text-secondary'}">${totalDone}/${habits.length} completados${allDone ? ' ✓' : ''}</span>
+                <span class="text-muted">${pct}%</span>
+            </div>
             ` : ''}
+
+            ${showRisk ? `
+            <div class="hb-risk-banner">
+                ${icon('flame', 13, 'streak-icon')} ${pending.length} hábito${pending.length > 1 ? 's' : ''} sin completar — protege tu racha
+            </div>` : ''}
+
+            ${currentView === 'list' ? _renderList(pending, done, todayDone, completions) : _renderHeatmap(habits, completions)}
+
+            ${habits.length === 0 ? `
+            <div class="hb-empty">
+                <p class="hb-empty-icon">🎯</p>
+                <h3>Empieza tu transformación</h3>
+                <p class="text-secondary">La consistencia es más poderosa que la intensidad. Crea tu primer hábito.</p>
+                <button class="btn btn-primary" id="hb-add-empty">+ Crear primer hábito</button>
+            </div>` : ''}
         </div>
     `;
 
-    document.getElementById('toggle-view-btn')?.addEventListener('click', () => {
+    document.getElementById('hb-toggle-view')?.addEventListener('click', () => {
         currentView = currentView === 'list' ? 'heatmap' : 'list';
         render();
     });
-    document.getElementById('add-habit-btn')?.addEventListener('click', showAddHabitForm);
-    document.getElementById('add-habit-empty')?.addEventListener('click', showAddHabitForm);
+    document.getElementById('hb-add')?.addEventListener('click', showAddForm);
+    document.getElementById('hb-add-empty')?.addEventListener('click', showAddForm);
 
-    document.querySelectorAll('.habit-check').forEach((checkbox) => {
-        checkbox.addEventListener('click', (event) => {
-            const habitId = event.currentTarget.dataset.id;
-            toggleHabit(habitId);
-        });
+    document.querySelectorAll('.hb-check').forEach(btn => {
+        btn.addEventListener('click', e => { e.stopPropagation(); toggleHabit(btn.dataset.id); });
     });
-
-    document.querySelectorAll('.habit-delete').forEach((btn) => {
-        btn.addEventListener('click', (event) => {
-            event.stopPropagation();
-            deleteHabit(event.currentTarget.dataset.id);
-        });
+    document.querySelectorAll('.hb-edit').forEach(btn => {
+        btn.addEventListener('click', e => { e.stopPropagation(); editHabit(btn.dataset.id); });
     });
-
-    document.querySelectorAll('.habit-edit').forEach((btn) => {
-        btn.addEventListener('click', (event) => {
-            event.stopPropagation();
-            editHabit(event.currentTarget.dataset.id);
-        });
+    document.querySelectorAll('.hb-delete').forEach(btn => {
+        btn.addEventListener('click', e => { e.stopPropagation(); deleteHabit(btn.dataset.id); });
     });
 }
 
-function renderListView(grouped, todayCompletions, completions) {
-    let html = '';
-    for (const [category, habits] of Object.entries(grouped)) {
-        const categoryInfo = CATEGORIES[category] || {
-            name: cleanHabitText(category, 'Sin categoria'),
-            icon: icon('sparkle', 14, 'category-icon-svg'),
-            color: 'var(--accent-primary)'
-        };
-        const categoryIcon = cleanHabitText(categoryInfo.icon, icon('sparkle', 14, 'category-icon-svg'));
-        const categoryName = cleanHabitText(categoryInfo.name, 'Sin categoria');
-        const categoryColor = cleanHabitText(categoryInfo.color, 'var(--accent-primary)');
-        html += `
-            <div class="habit-category">
-                <h3 class="category-header" style="color:${categoryColor}">
-                    <span>${categoryIcon}</span> ${categoryName}
-                </h3>
-                <div class="habits-list">
-                    ${habits.map((habit) => {
-                        const done = todayCompletions.includes(habit.id);
-                        const streak = getStreakForHabit(habit.id, completions);
-                        const best = getBestStreakForHabit(habit.id, completions);
-                        const lvl = streakLevel(streak);
-                        const habitName = cleanHabitText(habit.name, 'Habito sin nombre');
-                        const cueText = cleanHabitText(habit.cue, '');
-                        const streakHtml = streak > 0 ? `
-                            <div class="streak-pill streak-${lvl}">
-                                <span class="streak-flame">${streak >= 66 ? icon('shield', 11, 'streak-icon') : icon('flame', 11, 'streak-icon')}</span>
-                                <span class="streak-num">${streak}</span>
-                                ${best > streak ? `<span class="streak-rec">/ ${best}</span>` : ''}
-                            </div>` : '<div class="streak-pill streak-zero">-</div>';
-                        return `
-                            <div class="habit-item glass-card ${done ? 'habit-done' : ''}" ${habit.stackAfter ? `style="margin-left:20px;border-left:3px solid ${categoryColor}"` : ''}>
-                                <button class="habit-check ${done ? 'checked' : ''}" data-id="${habit.id}" style="--cat-color:${categoryColor}" aria-label="Completar habito">
-                                    ${done ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
-                                </button>
-                                <div class="habit-info">
-                                    <span class="habit-name">${habitName}</span>
-                                    ${cueText ? `<span class="habit-cue">${icon('arrowRight', 10, 'inline-arrow-icon')} ${cueText}</span>` : ''}
-                                </div>
-                                <div class="habit-meta">
-                                    ${streakHtml}
-                                    <button class="btn-icon habit-edit" data-id="${habit.id}" title="Editar">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                    </button>
-                                    <button class="btn-icon habit-delete" data-id="${habit.id}" title="Eliminar">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
+function _habitRow(h, todayDone, completions) {
+    const done = todayDone.includes(h.id);
+    const cat = CATEGORIES[h.category] || {};
+    const streak = getStreakForHabit(h.id, completions);
+    const best = getBestStreakForHabit(h.id, completions);
+    return `
+        <div class="hb-row ${done ? 'hb-row-done' : ''}" data-id="${h.id}">
+            <button class="hb-check ${done ? 'checked' : ''}" data-id="${h.id}"
+                style="--cat:${cat.color || 'var(--accent-primary)'}" aria-label="Completar">
+                ${done ? icon('check', 14, '') : ''}
+            </button>
+            <div class="hb-info">
+                <span class="hb-name">${cleanText(h.name, 'Hábito')}</span>
+                ${h.cue ? `<span class="hb-cue">${cleanText(h.cue)}</span>` : ''}
             </div>
-        `;
+            <div class="hb-right">
+                ${streak > 0 ? `
+                <span class="hb-streak ${streak >= 7 ? 'hot' : ''}">
+                    ${icon('flame', 11, 'streak-icon')} ${streak}${best > streak ? `<span class="hb-best">/${best}</span>` : ''}
+                </span>` : ''}
+                <button class="hb-edit btn-icon" data-id="${h.id}" title="Editar">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="hb-delete btn-icon" data-id="${h.id}" title="Eliminar">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                </button>
+            </div>
+        </div>`;
+}
+
+function _renderList(pending, done, todayDone, completions) {
+    if (!pending.length && !done.length) return '';
+    let html = '<div class="hb-list">';
+    if (pending.length) {
+        html += pending.map(h => _habitRow(h, todayDone, completions)).join('');
     }
+    if (done.length) {
+        if (pending.length) html += '<div class="hb-divider"></div>';
+        html += done.map(h => _habitRow(h, todayDone, completions)).join('');
+    }
+    html += '</div>';
     return html;
 }
 
-function renderHeatmapView(habits, completions) {
-    let html = '<div class="heatmap-container">';
-    for (const habit of habits) {
+function _renderHeatmap(habits, completions) {
+    if (!habits.length) return '';
+    let html = '<div class="hb-heatmap-wrap">';
+    for (const h of habits) {
         const days = [];
         const d = new Date();
         for (let i = 89; i >= 0; i--) {
-            const dt = new Date(d);
-            dt.setDate(dt.getDate() - i);
-            const dateStr = formatDate(dt);
-            const done = (completions[dateStr] || []).includes(habit.id);
-            days.push({ date: dateStr, done });
+            const dt = new Date(d); dt.setDate(dt.getDate() - i);
+            const ds = formatDate(dt);
+            days.push({ date: ds, done: (completions[ds] || []).includes(h.id) });
         }
-        const categoryColor = CATEGORIES[habit.category]?.color || '#4b91ff';
-        const habitName = cleanHabitText(habit.name, 'Habito sin nombre');
+        const color = CATEGORIES[h.category]?.color || '#4b91ff';
         html += `
-            <div class="heatmap-habit glass-card">
-                <div class="heatmap-label">${habitName}</div>
-                <div class="heatmap-grid">
-                    ${days.map((day) => `<div class="heatmap-cell ${day.done ? 'heatmap-done' : ''}" title="${day.date}" style="--done-color:${categoryColor}"></div>`).join('')}
+            <div class="hb-heatmap-item">
+                <span class="hb-heatmap-label">${cleanText(h.name, 'Hábito')}</span>
+                <div class="hb-heatmap-grid">
+                    ${days.map(day => `<div class="hb-cell ${day.done ? 'done' : ''}" title="${day.date}" style="--c:${color}"></div>`).join('')}
                 </div>
-            </div>
-        `;
+            </div>`;
     }
     html += '</div>';
     return html;
@@ -196,16 +154,17 @@ function renderHeatmapView(habits, completions) {
 function toggleHabit(habitId) {
     const todayStr = today();
     const completions = store.get('habits.completions') || {};
-    const todayCompletions = completions[todayStr] || [];
+    const list = [...(completions[todayStr] || [])];
+    const isDone = list.includes(habitId);
 
-    if (todayCompletions.includes(habitId)) {
-        completions[todayStr] = todayCompletions.filter((id) => id !== habitId);
+    if (isDone) {
+        completions[todayStr] = list.filter(id => id !== habitId);
         store.set('habits.completions', completions);
         render();
         return;
     }
 
-    completions[todayStr] = [...todayCompletions, habitId];
+    completions[todayStr] = [...list, habitId];
     const streak = getStreakForHabit(habitId, completions);
 
     const records = store.get('stats.streakRecords') || {};
@@ -214,160 +173,118 @@ function toggleHabit(habitId) {
         store.set('stats.streakRecords', records);
     }
 
-    const streakBonus = Math.min(streak * XP.HABIT_STREAK_BONUS, 30);
-    addXP(XP.HABIT_COMPLETE + streakBonus);
+    addXP(XP.HABIT_COMPLETE + Math.min(streak * XP.HABIT_STREAK_BONUS, 30));
 
-    const activeHabits = (store.get('habits.items') || []).filter((habit) => !habit.archived);
-    const todayDone = completions[todayStr] || [];
-    if (activeHabits.every((habit) => todayDone.includes(habit.id))) {
+    const allHabits = (store.get('habits.items') || []).filter(h => !h.archived);
+    if (allHabits.every(h => (completions[todayStr] || []).includes(h.id))) {
         addXP(XP.ALL_HABITS_DONE);
+        createConfetti(document.body);
+        showToast('¡Todos los hábitos completados! +20 XP', 'success', 4000);
+    } else {
+        playSound('complete');
+        const msg = streakMilestoneMsg(streak);
+        const milestones = [1, 3, 7, 14, 21, 30, 60, 66, 100, 200, 365];
+        if (milestones.includes(streak) && msg) {
+            showToast(msg, 'success');
+            if (streak >= 7) { createConfetti(document.body); animateReward(document.querySelector(`[data-id="${habitId}"]`)); }
+        }
     }
 
     checkAchievements();
-
-    const milestoneMsg = streakMilestoneMsg(streak);
-    const milestoneStreaks = [1, 3, 7, 14, 21, 30, 60, 66, 100, 200, 365];
-    if (milestoneStreaks.includes(streak) && milestoneMsg) {
-        playSound('streak');
-        showToast(milestoneMsg, 'success');
-        if (streak >= 7) {
-            createConfetti(document.body);
-            animateReward(document.querySelector(`[data-id="${habitId}"]`));
-        }
-    } else if (Math.random() < 0.12) {
-        const bonusMessages = [
-            'Racha activa. Cada repeticion fortalece el patron.',
-            'Constancia en marcha. Tu sistema responde mejor.',
-            'Habito registrado. Sigue con la misma precision.',
-            'Cada dia cuenta. Mantienes una base solida.'
-        ];
-        showToast(bonusMessages[Math.floor(Math.random() * bonusMessages.length)], 'success');
-        playSound('complete');
-    } else {
-        playSound('complete');
-    }
-
     store.set('habits.completions', completions);
     render();
 }
 
-function showAddHabitForm() {
-    const habits = store.get('habits.items') || [];
-    const activeHabits = habits.filter((habit) => !habit.archived);
-
-    const formHtml = `
-        <form id="habit-form" class="form">
+function showAddForm() {
+    const activeHabits = (store.get('habits.items') || []).filter(h => !h.archived);
+    showModal('Nuevo hábito', `
+        <form id="hb-form" class="form">
             <div class="form-group">
-                <label>Nombre del habito</label>
-                <input type="text" id="habit-name" placeholder="Ej: Meditar 10 minutos" required>
+                <label>Nombre</label>
+                <input type="text" id="hb-name" placeholder="Ej: Meditar 10 minutos" required autofocus>
             </div>
             <div class="form-group">
-                <label>Categoria</label>
-                <select id="habit-category">
-                    ${Object.entries(CATEGORIES).map(([key, category]) => `<option value="${key}">${category.name}</option>`).join('')}
+                <label>Categoría</label>
+                <select id="hb-category">
+                    ${Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}">${c.name}</option>`).join('')}
                 </select>
             </div>
             <div class="form-group">
-                <label>Frecuencia</label>
-                <select id="habit-frequency">
-                    <option value="daily">Diario</option>
-                    <option value="weekdays">Lun-Vie</option>
-                </select>
+                <label>Señal / Disparador <span class="text-muted">(opcional)</span></label>
+                <input type="text" id="hb-cue" placeholder="Ej: Después de despertar...">
+                <small class="form-hint">Señal → Rutina → Recompensa</small>
             </div>
             <div class="form-group">
-                <label>Apilar despues de</label>
-                <select id="habit-stack">
-                    <option value="">Ninguno</option>
-                    ${activeHabits.map((habit) => `<option value="${habit.id}">${cleanHabitText(habit.name, 'Habito sin nombre')}</option>`).join('')}
-                </select>
-                <small class="form-hint">Conecta este habito a uno existente para iniciar con menos friccion.</small>
+                <label>Recompensa <span class="text-muted">(opcional)</span></label>
+                <input type="text" id="hb-reward" placeholder="Ej: 5 min de música">
             </div>
-            <div class="form-group">
-                <label>Senal / Disparador</label>
-                <input type="text" id="habit-cue" placeholder="Ej: Despues de servir mi cafe...">
-                <small class="form-hint">Loop de habitos: Senal -> Rutina -> Recompensa</small>
-            </div>
-            <div class="form-group">
-                <label>Recompensa</label>
-                <input type="text" id="habit-reward" placeholder="Ej: 5 min de musica">
-            </div>
-            <button type="submit" class="btn btn-primary btn-block">Crear habito</button>
+            <button type="submit" class="btn btn-primary btn-block">Crear hábito</button>
         </form>
-    `;
-
-    showModal('Nuevo habito', formHtml);
-    document.getElementById('habit-form')?.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const habit = {
+    `);
+    document.getElementById('hb-form')?.addEventListener('submit', e => {
+        e.preventDefault();
+        const items = store.get('habits.items') || [];
+        items.push({
             id: generateId(),
-            name: cleanHabitText(document.getElementById('habit-name').value, 'Habito sin nombre'),
-            category: document.getElementById('habit-category').value,
-            frequency: document.getElementById('habit-frequency').value,
-            stackAfter: document.getElementById('habit-stack').value || null,
-            cue: cleanHabitText(document.getElementById('habit-cue').value, ''),
-            reward: cleanHabitText(document.getElementById('habit-reward').value, ''),
+            name: cleanText(document.getElementById('hb-name').value, 'Hábito'),
+            category: document.getElementById('hb-category').value,
+            cue: cleanText(document.getElementById('hb-cue').value),
+            reward: cleanText(document.getElementById('hb-reward').value),
+            frequency: 'daily',
             createdAt: new Date().toISOString(),
             archived: false
-        };
-        const items = store.get('habits.items') || [];
-        items.push(habit);
+        });
         store.set('habits.items', items);
         closeModal();
-        showToast('Habito creado. Cada repeticion construye consistencia.');
+        showToast('Hábito creado. La consistencia construye identidad.');
         render();
     });
 }
 
 function editHabit(habitId) {
     const habits = store.get('habits.items') || [];
-    const habit = habits.find((item) => item.id === habitId);
-    if (!habit) return;
-
-    const formHtml = `
-        <form id="edit-habit-form" class="form">
+    const h = habits.find(item => item.id === habitId);
+    if (!h) return;
+    showModal('Editar hábito', `
+        <form id="hb-edit-form" class="form">
             <div class="form-group">
                 <label>Nombre</label>
-                <input type="text" id="edit-habit-name" value="${cleanHabitText(habit.name, 'Habito sin nombre')}" required>
+                <input type="text" id="hb-edit-name" value="${cleanText(h.name)}" required>
             </div>
             <div class="form-group">
-                <label>Categoria</label>
-                <select id="edit-habit-category">
-                    ${Object.entries(CATEGORIES).map(([key, category]) =>
-                        `<option value="${key}" ${key === habit.category ? 'selected' : ''}>${category.name}</option>`
-                    ).join('')}
+                <label>Categoría</label>
+                <select id="hb-edit-category">
+                    ${Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}" ${k === h.category ? 'selected' : ''}>${c.name}</option>`).join('')}
                 </select>
             </div>
             <div class="form-group">
-                <label>Senal</label>
-                <input type="text" id="edit-habit-cue" value="${cleanHabitText(habit.cue, '')}">
+                <label>Señal</label>
+                <input type="text" id="hb-edit-cue" value="${cleanText(h.cue)}">
             </div>
             <div class="form-group">
                 <label>Recompensa</label>
-                <input type="text" id="edit-habit-reward" value="${cleanHabitText(habit.reward, '')}">
+                <input type="text" id="hb-edit-reward" value="${cleanText(h.reward)}">
             </div>
             <button type="submit" class="btn btn-primary btn-block">Guardar</button>
         </form>
-    `;
-
-    showModal('Editar habito', formHtml);
-    document.getElementById('edit-habit-form')?.addEventListener('submit', (event) => {
-        event.preventDefault();
-        habit.name = cleanHabitText(document.getElementById('edit-habit-name').value, 'Habito sin nombre');
-        habit.category = document.getElementById('edit-habit-category').value;
-        habit.cue = cleanHabitText(document.getElementById('edit-habit-cue').value, '');
-        habit.reward = cleanHabitText(document.getElementById('edit-habit-reward').value, '');
+    `);
+    document.getElementById('hb-edit-form')?.addEventListener('submit', e => {
+        e.preventDefault();
+        h.name = cleanText(document.getElementById('hb-edit-name').value, 'Hábito');
+        h.category = document.getElementById('hb-edit-category').value;
+        h.cue = cleanText(document.getElementById('hb-edit-cue').value);
+        h.reward = cleanText(document.getElementById('hb-edit-reward').value);
         store.set('habits.items', habits);
         closeModal();
-        showToast('Habito actualizado');
+        showToast('Hábito actualizado');
         render();
     });
 }
 
 function deleteHabit(habitId) {
-    if (!confirm('Eliminar este habito? Perderas su historial de rachas.')) return;
-    const habits = store.get('habits.items') || [];
-    store.set('habits.items', habits.filter((habit) => habit.id !== habitId));
-    showToast('Habito eliminado');
+    if (!confirm('¿Eliminar este hábito? Se perderá el historial de rachas.')) return;
+    store.set('habits.items', (store.get('habits.items') || []).filter(h => h.id !== habitId));
+    showToast('Hábito eliminado');
     render();
 }
 

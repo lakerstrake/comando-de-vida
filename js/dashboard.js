@@ -1,196 +1,348 @@
-// dashboard.js - Dashboard module
+// dashboard.js - Clean, minimal, action-focused dashboard
 import { store } from './store.js';
-import { today, formatDateDisplay, getStreakForHabit, getBestStreakForHabit, getAppStreak, streakLevel, CATEGORIES, QUOTES, icon } from './ui.js';
-import { getLevelInfo, getLevelProgress, getNextLevel } from './gamification.js';
+import { today, formatDate, formatDateDisplay, getStreakForHabit, getBestStreakForHabit, getAppStreak, CATEGORIES, QUOTES, icon, showToast, playSound, animateReward, createConfetti } from './ui.js';
+import { getLevelInfo, getLevelProgress, getNextLevel, addXP, checkAchievements, XP } from './gamification.js';
 
 export function render() {
     const container = document.getElementById('main-content');
-    const userName = store.get('settings.userName') || 'Usuario';
-    const habits = store.get('habits.items') || [];
-    const completions = store.get('habits.completions') || {};
-    const tasks = store.get('planner.tasks') || [];
     const todayStr = today();
-    const todayTasks = tasks.filter((task) => task.date === todayStr);
-    const completedTasks = todayTasks.filter((task) => task.completed);
-    const todayCompletions = completions[todayStr] || [];
-    const activeHabits = habits.filter((habit) => !habit.archived);
-    const habitsDone = activeHabits.filter((habit) => todayCompletions.includes(habit.id)).length;
-    const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
-
-    const habitRate = activeHabits.length ? (habitsDone / activeHabits.length) * 100 : 0;
-    const taskRate = todayTasks.length ? (completedTasks.length / todayTasks.length) * 100 : 0;
-    const goals = store.get('goals.items') || [];
-    const activeGoals = goals.filter((goal) => goal.status === 'active');
-    const goalProgress = activeGoals.length ? activeGoals.reduce((sum, goal) => sum + goal.progress, 0) / activeGoals.length : 0;
-    const lifeScore = Math.round(habitRate * 0.4 + taskRate * 0.3 + goalProgress * 0.3);
-
-    const streakRecords = store.get('stats.streakRecords') || {};
-    const streaks = activeHabits
-        .map((habit) => ({
-            id: habit.id,
-            name: habit.name,
-            category: habit.category,
-            streak: getStreakForHabit(habit.id, completions),
-            best: Math.max(getBestStreakForHabit(habit.id, completions), streakRecords[habit.id] || 0)
-        }))
-        .filter((entry) => entry.streak > 0)
-        .sort((a, b) => b.streak - a.streak)
-        .slice(0, 5);
-
-    const appStreak = getAppStreak(completions);
+    const userName = store.get('settings.userName') || 'Tú';
+    const habits = (store.get('habits.items') || []).filter(h => !h.archived);
+    const completions = store.get('habits.completions') || {};
+    const todayDone = completions[todayStr] || [];
+    const tasks = store.get('planner.tasks') || [];
+    const todayTasks = tasks.filter(t => t.date === todayStr);
     const gam = store.get('gamification') || { xp: 0 };
     const xp = gam.xp || 0;
     const level = getLevelInfo(xp);
-    const nextLvl = getNextLevel(xp);
     const xpPct = getLevelProgress(xp);
+    const nextLvl = getNextLevel(xp);
+    const appStreak = getAppStreak(completions);
+
+    const pendingHabits = habits.filter(h => !todayDone.includes(h.id));
+    const doneHabits = habits.filter(h => todayDone.includes(h.id));
+    const habitPct = habits.length ? Math.round((doneHabits.length / habits.length) * 100) : 0;
+    const allDone = habits.length > 0 && pendingHabits.length === 0;
+
+    // Top habits to show: pending sorted by streak desc, then done ones
+    const pendingSorted = pendingHabits
+        .map(h => ({ ...h, streak: getStreakForHabit(h.id, completions) }))
+        .sort((a, b) => b.streak - a.streak);
+    const habitDisplay = [...pendingSorted, ...doneHabits.map(h => ({ ...h, streak: getStreakForHabit(h.id, completions) }))].slice(0, 5);
+
+    // MIT — most important pending task
+    const mit = todayTasks.filter(t => !t.completed).sort((a, b) =>
+        ((b.urgent && b.important) ? 2 : b.important ? 1 : 0) - ((a.urgent && a.important) ? 2 : a.important ? 1 : 0)
+    )[0] || null;
+
+    // Mood today
+    const journalEntries = store.get('journal.entries') || [];
+    const todayEntry = journalEntries.find(e => e.date === todayStr);
+    const todayMood = todayEntry?.mood || 0;
 
     const hour = new Date().getHours();
-    const greeting = hour < 12 ? 'Buenos dias' : hour < 18 ? 'Buenas tardes' : 'Buenas noches';
-    const dayOfWeek = new Date().getDay();
-    const dayOfMonth = new Date().getDate();
-    const isFreshStart = dayOfWeek === 1 || dayOfMonth === 1;
+    const greeting = hour < 6 ? 'Buenas noches' : hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+    const quote = QUOTES[new Date().getDate() % QUOTES.length];
+
+    // One key insight
+    const insight = getTopInsight(habits, completions, todayDone);
 
     container.innerHTML = `
-        <div class="dashboard">
-            <div class="dashboard-header">
-                <div>
-                    <h1>${greeting}, ${userName}</h1>
-                    <p class="text-secondary">${formatDateDisplay(todayStr)}${isFreshStart ? ' - Nuevo ciclo, nueva oportunidad' : ''}</p>
+        <div class="dash-clean">
+
+            <!-- Header -->
+            <div class="dash-header-clean">
+                <div class="dash-greeting-wrap">
+                    <h1 class="dash-greeting">${greeting}, ${userName}</h1>
+                    <p class="dash-date text-secondary">${formatDateDisplay(todayStr)}</p>
                 </div>
-                <a href="#/profile" class="dash-level-badge" title="Ver perfil y logros">
-                    <span class="dash-level-icon">${level.icon}</span>
-                    <div class="dash-level-info">
-                        <span class="dash-level-name">Niv.${level.level} - ${level.name}</span>
-                        <div class="dash-xp-bar">
-                            <div class="dash-xp-fill" style="width:${xpPct}%;background:${level.color}"></div>
-                        </div>
-                    </div>
-                </a>
-            </div>
-
-            <div class="quote-card glass-card">
-                <p class="quote-text">${quote}</p>
-            </div>
-
-            <div class="dashboard-grid">
-                <div class="glass-card score-card">
-                    <div class="score-circle">
-                        <svg viewBox="0 0 120 120">
-                            <circle cx="60" cy="60" r="54" fill="none" stroke="var(--bg-tertiary)" stroke-width="8"></circle>
-                            <circle cx="60" cy="60" r="54" fill="none" stroke="var(--accent-primary)" stroke-width="8"
-                                stroke-dasharray="339.3" stroke-dashoffset="${339.3 * (1 - lifeScore / 100)}"
-                                stroke-linecap="round" transform="rotate(-90 60 60)"></circle>
-                        </svg>
-                        <span class="score-number">${lifeScore}</span>
-                    </div>
-                    <div class="score-info">
-                        <h3 class="card-heading">Puntuacion de Vida</h3>
-                        <p class="text-secondary">Basado en habitos, tareas y metas</p>
-                    </div>
-                </div>
-
-                <div class="glass-card">
-                    <h3 class="card-heading">Habitos Hoy</h3>
-                    <div class="progress-stat">
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width:${activeHabits.length ? (habitsDone / activeHabits.length) * 100 : 0}%"></div>
-                        </div>
-                        <span class="stat-number">${habitsDone}/${activeHabits.length}</span>
-                    </div>
-                    <a href="#/habits" class="card-link">Ver habitos ${icon('arrowRight', 13, 'inline-arrow-icon')}</a>
-                </div>
-
-                <div class="glass-card">
-                    <h3 class="card-heading">Tareas Hoy</h3>
-                    <div class="progress-stat">
-                        <div class="progress-bar">
-                            <div class="progress-fill progress-fill-teal" style="width:${todayTasks.length ? (completedTasks.length / todayTasks.length) * 100 : 0}%"></div>
-                        </div>
-                        <span class="stat-number">${completedTasks.length}/${todayTasks.length}</span>
-                    </div>
-                    <a href="#/planner" class="card-link">Ver planificador ${icon('arrowRight', 13, 'inline-arrow-icon')}</a>
-                </div>
-
-                <div class="glass-card">
-                    <h3 class="card-heading">Metas Activas</h3>
-                    <div class="goals-summary">
-                        <span class="big-number">${activeGoals.length}</span>
-                        <span class="text-secondary">Progreso promedio: ${Math.round(goalProgress)}%</span>
-                    </div>
-                    <a href="#/goals" class="card-link">Ver metas ${icon('arrowRight', 13, 'inline-arrow-icon')}</a>
-                </div>
-            </div>
-
-            <div class="glass-card streaks-card">
-                <div class="streaks-header">
-                    <h3 class="card-heading">Rachas</h3>
+                <div class="dash-top-right">
                     ${appStreak > 0 ? `
-                    <div class="app-streak-badge">
+                    <div class="dash-streak-chip">
                         ${icon('flame', 13, 'streak-icon')}
-                        <span>${appStreak} dia${appStreak !== 1 ? 's' : ''} activo${appStreak !== 1 ? 's' : ''}</span>
+                        <span>${appStreak}d</span>
                     </div>` : ''}
+                    <a href="#/profile" class="dash-level-chip" title="Ver perfil">
+                        <span style="font-size:1rem">${level.icon}</span>
+                        <div class="dash-level-chip-bar" style="--fill:${xpPct}%;--color:${level.color}"></div>
+                    </a>
                 </div>
-                ${streaks.length ? `
-                <div class="streaks-list">
-                    ${streaks.map((entry) => {
-                        const lvl = streakLevel(entry.streak);
-                        const streakIcon = entry.streak >= 66 ? icon('shield', 12, 'streak-icon') : icon('flame', 12, 'streak-icon');
-                        return `
-                        <div class="streak-item">
-                            <span class="streak-category" style="color:${CATEGORIES[entry.category]?.color || '#4b91ff'}">${CATEGORIES[entry.category]?.icon || ''}</span>
-                            <span class="streak-name">${entry.name}</span>
-                            <div class="streak-right">
-                                <span class="streak-pill streak-${lvl}" style="display:inline-flex">
-                                    ${streakIcon}
-                                    <span class="streak-num">${entry.streak}</span>
-                                </span>
-                                ${entry.best > entry.streak ? `<span class="streak-best-label">rec. ${entry.best}</span>` : ''}
-                            </div>
-                        </div>`;
-                    }).join('')}
-                </div>` : `
-                <p class="text-secondary" style="font-size:0.8125rem;margin-top:8px">Completa habitos para construir rachas.</p>`}
-                <a href="#/habits" class="card-link" style="margin-top:12px;display:inline-flex;align-items:center;gap:6px">
-                    Ver habitos ${icon('arrowRight', 13, 'inline-arrow-icon')}
-                </a>
             </div>
 
-            <div class="dashboard-actions">
-                <a href="#/habits" class="action-btn glass-card">
-                    <span class="action-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                    </span>
-                    <span>Habitos</span>
-                </a>
-                <a href="#/planner" class="action-btn glass-card">
-                    <span class="action-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                    </span>
-                    <span>Pomodoro</span>
-                </a>
-                <a href="#/journal" class="action-btn glass-card">
-                    <span class="action-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                        </svg>
-                    </span>
+            <!-- Habits section -->
+            <div class="dash-section">
+                <div class="dash-section-header">
+                    <span class="dash-section-title">Hábitos de hoy</span>
+                    <span class="dash-section-meta ${allDone ? 'text-success' : ''}">${doneHabits.length}/${habits.length}</span>
+                </div>
+
+                ${habits.length === 0 ? `
+                <div class="dash-empty-habits">
+                    <p>Crea tu primer hábito para empezar</p>
+                    <a href="#/habits" class="btn btn-primary btn-sm">+ Nuevo hábito</a>
+                </div>` : `
+
+                <div class="dash-habit-progress">
+                    <div class="dash-habit-bar">
+                        <div class="dash-habit-bar-fill ${allDone ? 'all-done' : ''}" style="width:${habitPct}%"></div>
+                    </div>
+                    ${allDone ? `<span class="dash-all-done-label">✓ Completados</span>` : ''}
+                </div>
+
+                <div class="dash-habits-list" id="dash-habits-list">
+                    ${habitDisplay.map(h => _habitRow(h, todayDone)).join('')}
+                </div>
+
+                ${habits.length > 5 ? `
+                <a href="#/habits" class="dash-see-all">Ver todos los hábitos (${habits.length}) ${icon('arrowRight', 12, 'inline-arrow-icon')}</a>
+                ` : `<a href="#/habits" class="dash-see-all">Gestionar hábitos ${icon('arrowRight', 12, 'inline-arrow-icon')}</a>`}
+                `}
+            </div>
+
+            <!-- Priority task -->
+            <div class="dash-section">
+                <div class="dash-section-header">
+                    <span class="dash-section-title">Tarea principal</span>
+                </div>
+                ${mit ? `
+                <div class="dash-mit" data-id="${mit.id}">
+                    <button class="dash-mit-check ${mit.completed ? 'checked' : ''}" data-id="${mit.id}" aria-label="Completar tarea">
+                        ${mit.completed ? icon('check', 14, '') : ''}
+                    </button>
+                    <div class="dash-mit-info">
+                        <span class="dash-mit-title ${mit.completed ? 'done-text' : ''}">${mit.title || mit.text || 'Tarea sin título'}</span>
+                        ${mit.urgent && mit.important ? '<span class="dash-mit-tag urgent">Urgente</span>' : ''}
+                    </div>
+                    <a href="#/planner" class="dash-mit-go">${icon('arrowRight', 13, 'inline-arrow-icon')}</a>
+                </div>` : `
+                <a href="#/planner" class="dash-mit dash-mit-empty">
+                    <span class="text-muted">+ Añadir tarea principal del día</span>
+                    ${icon('arrowRight', 13, 'inline-arrow-icon')}
+                </a>`}
+            </div>
+
+            <!-- Mood check -->
+            ${todayMood === 0 ? `
+            <div class="dash-section">
+                <div class="dash-section-header">
+                    <span class="dash-section-title">¿Cómo te sientes hoy?</span>
+                </div>
+                <div class="dash-mood-row" id="dash-mood-row">
+                    ${[[1,'😔'],[2,'😕'],[3,'😐'],[4,'🙂'],[5,'😄']].map(([v,e]) => `
+                        <button class="dash-mood-btn" data-mood="${v}" title="${v}/5">${e}</button>`).join('')}
+                </div>
+            </div>` : `
+            <div class="dash-section">
+                <div class="dash-section-header">
+                    <span class="dash-section-title">Estado de ánimo hoy</span>
+                    <span class="dash-section-meta">${['','😔','😕','😐','🙂','😄'][todayMood]} ${todayMood}/5</span>
+                </div>
+            </div>`}
+
+            <!-- Insight -->
+            ${insight ? `
+            <div class="dash-insight" style="border-left-color:${insight.color}">
+                <span class="dash-insight-emoji">${insight.emoji}</span>
+                <div>
+                    <p class="dash-insight-text">${insight.text}</p>
+                    ${insight.action ? `<a href="${insight.link || '#/habits'}" class="dash-insight-link">${insight.action}</a>` : ''}
+                </div>
+            </div>` : ''}
+
+            <!-- Quote -->
+            <div class="dash-quote">
+                <p>"${quote}"</p>
+            </div>
+
+            <!-- Quick actions -->
+            <div class="dash-quick-actions">
+                <a href="#/journal" class="dash-action-btn">
+                    <span class="dash-action-icon">📝</span>
                     <span>Diario</span>
                 </a>
-                <a href="#/lifewheel" class="action-btn glass-card">
-                    <span class="action-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path>
-                        </svg>
-                    </span>
-                    <span>Rueda de Vida</span>
+                <a href="#/wellbeing" class="dash-action-btn">
+                    <span class="dash-action-icon">💨</span>
+                    <span>Bienestar</span>
+                </a>
+                <a href="#/goals" class="dash-action-btn">
+                    <span class="dash-action-icon">🎯</span>
+                    <span>Metas</span>
+                </a>
+                <a href="#/stats" class="dash-action-btn">
+                    <span class="dash-action-icon">📊</span>
+                    <span>Stats</span>
                 </a>
             </div>
         </div>
     `;
+
+    _attachListeners();
+}
+
+function _habitRow(habit, todayDone) {
+    const done = todayDone.includes(habit.id);
+    const catInfo = CATEGORIES[habit.category] || {};
+    const streak = habit.streak || 0;
+    return `
+        <div class="dash-habit-row ${done ? 'dash-habit-done' : ''}" data-id="${habit.id}">
+            <button class="dash-habit-check ${done ? 'checked' : ''}" data-id="${habit.id}"
+                style="--cat:${catInfo.color || 'var(--accent-primary)'}" aria-label="Completar ${habit.name}">
+                ${done ? icon('check', 15, '') : ''}
+            </button>
+            <div class="dash-habit-info">
+                <span class="dash-habit-name">${habit.name}</span>
+                ${habit.cue ? `<span class="dash-habit-cue text-muted">${habit.cue}</span>` : ''}
+            </div>
+            ${streak > 0 ? `
+            <div class="dash-habit-streak ${streak >= 7 ? 'hot' : ''}">
+                ${icon('flame', 11, 'streak-icon')} ${streak}
+            </div>` : ''}
+        </div>`;
+}
+
+function _attachListeners() {
+    const todayStr = today();
+
+    // Habit toggle
+    document.querySelectorAll('.dash-habit-check').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            _toggleHabit(btn.dataset.id);
+        });
+    });
+
+    // MIT task toggle
+    document.querySelectorAll('.dash-mit-check').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.id;
+            const tasks = store.get('planner.tasks') || [];
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            task.completed = !task.completed;
+            task.completedAt = task.completed ? new Date().toISOString() : null;
+            store.set('planner.tasks', tasks);
+            if (task.completed) {
+                addXP(XP.TASK_COMPLETE);
+                showToast('Tarea completada. +8 XP', 'success');
+            }
+            render();
+        });
+    });
+
+    // Mood selection
+    document.querySelectorAll('.dash-mood-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mood = parseInt(btn.dataset.mood);
+            const entries = store.get('journal.entries') || [];
+            const idx = entries.findIndex(e => e.date === todayStr);
+            if (idx >= 0) {
+                entries[idx].mood = mood;
+            } else {
+                entries.push({ date: todayStr, mood, createdAt: new Date().toISOString() });
+            }
+            store.set('journal.entries', entries);
+            const labels = { 1: 'Difícil, pero aquí estás. Eso cuenta.', 2: 'Los días bajos también forman parte del camino.', 3: 'Neutro está bien. Los mejores momentos suelen surgir de la calma.', 4: 'Bien es suficiente para construir algo grande.', 5: 'Excelente energía. Aprovéchala en lo que más importa.' };
+            showToast(labels[mood] || 'Estado registrado.', 'info', 4000);
+            render();
+        });
+    });
+}
+
+function _toggleHabit(habitId) {
+    const todayStr = today();
+    const completions = store.get('habits.completions') || {};
+    const todayList = [...(completions[todayStr] || [])];
+    const isDone = todayList.includes(habitId);
+
+    if (isDone) {
+        completions[todayStr] = todayList.filter(id => id !== habitId);
+    } else {
+        completions[todayStr] = [...todayList, habitId];
+        const streak = getStreakForHabit(habitId, completions);
+        const records = store.get('stats.streakRecords') || {};
+        if (!records[habitId] || streak > records[habitId]) {
+            records[habitId] = streak;
+            store.set('stats.streakRecords', records);
+        }
+        const bonus = Math.min(streak * XP.HABIT_STREAK_BONUS, 30);
+        addXP(XP.HABIT_COMPLETE + bonus);
+
+        const allHabits = (store.get('habits.items') || []).filter(h => !h.archived);
+        const newDone = completions[todayStr] || [];
+        if (allHabits.length > 0 && allHabits.every(h => newDone.includes(h.id))) {
+            addXP(XP.ALL_HABITS_DONE);
+            createConfetti(document.body);
+            showToast('¡Todos los hábitos completados! +20 XP', 'success', 4000);
+        } else {
+            playSound('complete');
+            const milestones = [7, 14, 21, 30, 66, 100];
+            if (milestones.includes(streak)) {
+                showToast(`🔥 ¡${streak} días seguidos! Racha ${streak >= 66 ? 'automatizada' : 'activa'}`, 'success', 4000);
+                createConfetti(document.body);
+            }
+        }
+        checkAchievements();
+    }
+
+    store.set('habits.completions', completions);
+    render();
+}
+
+// ── Single best insight ──
+function getTopInsight(habits, completions, todayDone) {
+    // Streak at risk
+    const atRisk = habits.filter(h => {
+        if (todayDone.includes(h.id)) return false;
+        let s = 0;
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        for (let i = 0; i < 60; i++) {
+            const ds = formatDate(d);
+            if ((completions[ds] || []).includes(h.id)) { s++; d.setDate(d.getDate() - 1); }
+            else break;
+        }
+        return s >= 3;
+    });
+    if (atRisk.length) return {
+        emoji: '🔥',
+        text: `${atRisk.length > 1 ? atRisk.length + ' rachas en riesgo' : `"${atRisk[0].name}" tiene una racha activa`} — no la pierdas hoy`,
+        color: '#ef4444',
+        action: 'Ver hábitos',
+        link: '#/habits'
+    };
+
+    // Trend
+    const last7 = [], prev7 = [];
+    for (let i = 0; i < 14; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const ds = formatDate(d);
+        const rate = habits.length ? (completions[ds] || []).filter(id => habits.some(h => h.id === id)).length / habits.length : 0;
+        if (i < 7) last7.push(rate); else prev7.push(rate);
+    }
+    const l7 = last7.reduce((s, v) => s + v, 0) / 7;
+    const p7 = prev7.reduce((s, v) => s + v, 0) / 7;
+    if (p7 > 0.05 && l7 - p7 >= 0.1) return {
+        emoji: '📈',
+        text: `Tu semana está siendo mejor que la anterior (+${Math.round((l7 - p7) * 100)}% en hábitos)`,
+        color: '#10b981', action: null
+    };
+
+    // Social
+    const socialLog = store.get('wellbeing.socialLog') || {};
+    let socialDays = 0;
+    for (let i = 1; i <= 7; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        if ((socialLog[formatDate(d)] || []).length > 0) socialDays++;
+    }
+    if (socialDays === 0) return {
+        emoji: '❤️',
+        text: 'Conecta con alguien hoy — las relaciones son el predictor #1 de felicidad a largo plazo',
+        color: '#ec4899',
+        action: 'Centro de bienestar',
+        link: '#/wellbeing'
+    };
+
+    return null;
 }
 
 export function init() {}
