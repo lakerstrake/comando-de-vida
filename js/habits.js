@@ -83,11 +83,14 @@ export function render() {
     });
 }
 
+const TIME_ICONS = { morning: '🌅', afternoon: '☀️', evening: '🌙' };
+
 function _habitRow(h, todayDone, completions) {
     const done = todayDone.includes(h.id);
     const cat = CATEGORIES[h.category] || {};
     const streak = getStreakForHabit(h.id, completions);
     const best = getBestStreakForHabit(h.id, completions);
+    const timeIcon = TIME_ICONS[h.timeContext] || '';
     return `
         <div class="hb-row ${done ? 'hb-row-done' : ''}" data-id="${h.id}">
             <button class="hb-check ${done ? 'checked' : ''}" data-id="${h.id}"
@@ -95,7 +98,7 @@ function _habitRow(h, todayDone, completions) {
                 ${done ? icon('check', 14, '') : ''}
             </button>
             <div class="hb-info">
-                <span class="hb-name">${cleanText(h.name, 'Hábito')}</span>
+                <span class="hb-name">${timeIcon ? `<span style="font-size:0.85em">${timeIcon}</span> ` : ''}${cleanText(h.name, 'Hábito')}</span>
                 ${h.cue ? `<span class="hb-cue">${cleanText(h.cue)}</span>` : ''}
             </div>
             <div class="hb-right">
@@ -218,6 +221,15 @@ function showAddForm() {
                 <label>Recompensa <span class="text-muted">(opcional)</span></label>
                 <input type="text" id="hb-reward" placeholder="Ej: 5 min de música">
             </div>
+            <div class="form-group">
+                <label>Momento del día</label>
+                <select id="hb-timecontext">
+                    <option value="anytime">Cualquier momento</option>
+                    <option value="morning">Mañana 🌅</option>
+                    <option value="afternoon">Tarde ☀️</option>
+                    <option value="evening">Noche 🌙</option>
+                </select>
+            </div>
             <button type="submit" class="btn btn-primary btn-block">Crear hábito</button>
         </form>
     `);
@@ -230,6 +242,7 @@ function showAddForm() {
             category: document.getElementById('hb-category').value,
             cue: cleanText(document.getElementById('hb-cue').value),
             reward: cleanText(document.getElementById('hb-reward').value),
+            timeContext: document.getElementById('hb-timecontext').value || 'anytime',
             frequency: 'daily',
             createdAt: new Date().toISOString(),
             archived: false
@@ -265,6 +278,15 @@ function editHabit(habitId) {
                 <label>Recompensa</label>
                 <input type="text" id="hb-edit-reward" value="${cleanText(h.reward)}">
             </div>
+            <div class="form-group">
+                <label>Momento del día</label>
+                <select id="hb-edit-timecontext">
+                    <option value="anytime" ${!h.timeContext || h.timeContext === 'anytime' ? 'selected' : ''}>Cualquier momento</option>
+                    <option value="morning" ${h.timeContext === 'morning' ? 'selected' : ''}>Mañana 🌅</option>
+                    <option value="afternoon" ${h.timeContext === 'afternoon' ? 'selected' : ''}>Tarde ☀️</option>
+                    <option value="evening" ${h.timeContext === 'evening' ? 'selected' : ''}>Noche 🌙</option>
+                </select>
+            </div>
             <button type="submit" class="btn btn-primary btn-block">Guardar</button>
         </form>
     `);
@@ -274,6 +296,7 @@ function editHabit(habitId) {
         h.category = document.getElementById('hb-edit-category').value;
         h.cue = cleanText(document.getElementById('hb-edit-cue').value);
         h.reward = cleanText(document.getElementById('hb-edit-reward').value);
+        h.timeContext = document.getElementById('hb-edit-timecontext').value || 'anytime';
         store.set('habits.items', habits);
         closeModal();
         showToast('Hábito actualizado');

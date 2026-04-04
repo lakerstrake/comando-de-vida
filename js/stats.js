@@ -68,6 +68,13 @@ export function render() {
                 <p class="st-chart-label">Top rachas</p>
                 <canvas id="streaks-chart" width="500" height="200"></canvas>
             </div>
+
+            <div class="st-insight-block" id="st-insights"></div>
+
+            <div class="st-chart-block">
+                <p class="st-chart-label">Por día de semana (últimos 28 días)</p>
+                <canvas id="bestday-chart" width="500" height="160"></canvas>
+            </div>
         </div>
     `;
 
@@ -81,6 +88,8 @@ export function render() {
     _drawTasksChart();
     _drawMoodChart();
     _drawStreaksChart();
+    _drawBestDayChart();
+    _renderInsights();
 }
 
 function _getDates(range) {
@@ -264,6 +273,80 @@ function _renderSummary() {
               'Buen ritmo. Mantén la consistencia.'}
         </p>
     `;
+}
+
+function _drawBestDayChart() {
+    const s = _setupCanvas('bestday-chart'); if (!s) return;
+    const { ctx, w, h } = s;
+    const habits = (store.get('habits.items') || []).filter(h => !h.archived);
+    const completions = store.get('habits.completions') || {};
+    if (!habits.length) return;
+
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const sums = Array(7).fill(0), counts = Array(7).fill(0);
+    for (let i = 1; i <= 28; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const ds = formatDate(d);
+        const dow = d.getDay();
+        const rate = (completions[ds] || []).filter(id => habits.some(h => h.id === id)).length / habits.length;
+        sums[dow] += rate; counts[dow]++;
+    }
+    const avgs = sums.map((s, i) => counts[i] ? Math.round((s / counts[i]) * 100) : 0);
+    const pal = getPalette();
+    const maxAvg = Math.max(...avgs, 1);
+    _drawBars(ctx, w, h, dayNames, avgs, avgs.map(v => v >= maxAvg * 0.9 ? pal.accent : `rgba(79,70,229,0.35)`));
+}
+
+function _renderInsights() {
+    const el = document.getElementById('st-insights'); if (!el) return;
+    const habits = (store.get('habits.items') || []).filter(h => !h.archived);
+    const completions = store.get('habits.completions') || {};
+    const entries = store.get('journal.entries') || [];
+
+    // Mood ↔ habit correlation (last 30 days with mood data)
+    const pairs = [];
+    for (let i = 1; i <= 30; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const ds = formatDate(d);
+        const mood = entries.find(e => e.date === ds)?.mood;
+        if (!mood || !habits.length) continue;
+        const rate = (completions[ds] || []).filter(id => habits.some(h => h.id === id)).length / habits.length;
+        pairs.push({ mood, rate });
+    }
+
+    let corrText = null;
+    if (pairs.length >= 7) {
+        const highHabitDays = pairs.filter(p => p.rate >= 0.7);
+        const lowHabitDays  = pairs.filter(p => p.rate < 0.3);
+        const avgMoodHigh = highHabitDays.length ? (highHabitDays.reduce((s, p) => s + p.mood, 0) / highHabitDays.length).toFixed(1) : null;
+        const avgMoodLow  = lowHabitDays.length  ? (lowHabitDays.reduce((s, p) => s + p.mood, 0) / lowHabitDays.length).toFixed(1) : null;
+        if (avgMoodHigh && avgMoodLow && parseFloat(avgMoodHigh) > parseFloat(avgMoodLow)) {
+            corrText = `En días con ≥70% de hábitos tu ánimo es ${avgMoodHigh}/5 vs ${avgMoodLow}/5 en días bajos. Los hábitos predicen tu bienestar.`;
+        } else if (avgMoodHigh && avgMoodLow) {
+            corrText = `Correlación hábito-ánimo débil (${avgMoodHigh} vs ${avgMoodLow}/5). Puede que el sueño o el estrés importen más en tu caso.`;
+        }
+    }
+
+    // Best consecutive streak across all habits
+    const allStreaks = habits.map(h => ({ name: h.name, streak: getStreakForHabit(h.id, completions) })).filter(h => h.streak > 0).sort((a, b) => b.streak - a.streak);
+    const top = allStreaks[0];
+
+    const items = [];
+    if (corrText) items.push({ emoji: '🧠', color: '#6366f1', text: corrText });
+    if (top && top.streak >= 7) {
+        const msg = top.streak >= 66 ? `hábito automatizado (umbral 66 días, Phillippa Lally 2010)` : top.streak >= 21 ? `en la zona de consolidación` : `racha activa`;
+        items.push({ emoji: '🔥', color: '#f59e0b', text: `"${top.name}": ${top.streak} días — ${msg}.` });
+    }
+
+    if (!items.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+        <div class="st-insight-list">
+            ${items.map(item => `
+            <div class="st-insight-item" style="border-left-color:${item.color}">
+                <span>${item.emoji}</span>
+                <span>${item.text}</span>
+            </div>`).join('')}
+        </div>`;
 }
 
 export function init() {}

@@ -75,6 +75,8 @@ export function render() {
     const dateStr = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
     const quote = QUOTES[new Date().getDate() % QUOTES.length];
     const routineDone = MORNING_STEPS.filter(s => todayRoutine.has(s.id)).length;
+    const savedIntention = store.get(`brief.intention.${todayStr}`) || '';
+    const savedWin = store.get(`brief.win.${todayStr}`) || '';
 
     let appStreak = 0;
     const d = new Date();
@@ -176,6 +178,22 @@ export function render() {
                 </div>
             </div>
 
+            <!-- Implementation Intention (Gollwitzer, 1999) -->
+            <div class="brief-block">
+                <p class="brief-block-label">Intención de hoy</p>
+                <p class="brief-intent-hint">«Cuando [situación], haré [acción concreta].» Las intenciones específicas triplican la tasa de logro (Gollwitzer, 1999).</p>
+                <textarea id="brief-intention" rows="2" placeholder="Cuando termine de desayunar, meditaré 10 minutos sin interrupciones.">${escapeHtml(savedIntention)}</textarea>
+                <button type="button" class="btn btn-sm btn-ghost brief-save-btn" id="save-intention" style="margin-top:6px">Guardar</button>
+            </div>
+
+            <!-- Win definition -->
+            <div class="brief-block">
+                <p class="brief-block-label">¿Qué haría que hoy sea un gran día?</p>
+                <p class="brief-intent-hint">Define un único resultado que, si lo logras, haría que el día valga la pena.</p>
+                <textarea id="brief-win" rows="2" placeholder="Completar el informe antes de las 3 p.m. y llegar a casa a cenar.">${escapeHtml(savedWin)}</textarea>
+                <button type="button" class="btn btn-sm btn-ghost brief-save-btn" id="save-win" style="margin-top:6px">Guardar</button>
+            </div>
+
             <!-- Quote -->
             <div class="brief-quote-block">
                 <p class="brief-quote">"${escapeHtml(quote)}"</p>
@@ -206,6 +224,16 @@ export function render() {
             store.set('planner.morningRoutineCompletions', log);
             render();
         });
+    });
+
+    document.getElementById('save-intention')?.addEventListener('click', () => {
+        const val = document.getElementById('brief-intention')?.value.trim();
+        if (val) { store.set(`brief.intention.${todayStr}`, val); showToast('Intención guardada'); }
+    });
+
+    document.getElementById('save-win')?.addEventListener('click', () => {
+        const val = document.getElementById('brief-win')?.value.trim();
+        if (val) { store.set(`brief.win.${todayStr}`, val); showToast('Definición de victoria guardada'); }
     });
 
     document.getElementById('save-bedtime')?.addEventListener('click', () => {

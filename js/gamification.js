@@ -148,6 +148,50 @@ export function checkAchievements() {
     if (getLevelInfo(xp).level >= 10) unlockAchievement('level_10');
 }
 
+// ── Daily Challenge ──────────────────────────────────────────────
+// Deterministic by day-of-year: same challenge all day, rotates daily
+// Challenges grounded in behavioral science (implementation intentions,
+// BJ Fogg tiny habits, cognitive reframing, Csikszentmihalyi flow)
+const DAILY_CHALLENGES = [
+    { id: 'wakeup_no_phone', emoji: '🌅', title: 'Primera hora sin teléfono', science: 'Reduce cortisol matutino y mejora el enfoque (Newport, 2019)', xp: 20 },
+    { id: 'cold_end', emoji: '🚿', title: '30 seg de agua fría al terminar la ducha', science: 'Activa norepinefrina +200–300% (Šrámek et al.)', xp: 15 },
+    { id: 'pomodoro_deep', emoji: '⏱️', title: 'Un bloque de 25 min de trabajo profundo sin interrupciones', science: 'El deep work genera los mayores logros profesionales (Newport)', xp: 20 },
+    { id: 'gratitude_3', emoji: '🙏', title: 'Escribe 3 cosas concretas por las que estás agradecido', science: 'Gratitud diaria aumenta bienestar subjetivo 25% (Emmons & McCullough)', xp: 15 },
+    { id: 'walk_10', emoji: '🚶', title: 'Camina 10 minutos al aire libre', science: 'Reduce cortisol y sube BDNF — neuroplasticidad (Ratey, "Spark")', xp: 15 },
+    { id: 'intention', emoji: '🎯', title: 'Define tu intención del día en una sola frase', science: 'Las intenciones de implementación triplican el logro (Gollwitzer, 1999)', xp: 10 },
+    { id: 'no_social_morning', emoji: '📵', title: 'Sin redes sociales antes del mediodía', science: 'El scroll pasivo reduce dopamina y motivación intrínseca', xp: 20 },
+    { id: 'connect_1', emoji: '❤️', title: 'Contacta a una persona significativa hoy', science: 'Relaciones sociales: predictor #1 de longevidad (Harvard Study)', xp: 20 },
+    { id: 'breathe_478', emoji: '💨', title: 'Practica 4-7-8 breathing por 4 ciclos', science: 'Activa el nervio vago y reduce ansiedad en minutos (Weil)', xp: 10 },
+    { id: 'no_ultra', emoji: '🥗', title: 'Sin alimentos ultraprocesados en todo el día', science: 'Ultra-procesados reducen cognición y aumentan inflamación', xp: 20 },
+    { id: 'learn_10', emoji: '📚', title: 'Lee o aprende algo nuevo por 10 minutos', science: 'El aprendizaje continuo mantiene la neuroplasticidad (Doidge)', xp: 15 },
+    { id: 'visualize', emoji: '🧠', title: 'Visualiza tu meta principal en detalle por 2 minutos', science: 'La visualización activa las mismas redes neuronales que la acción', xp: 10 },
+    { id: 'single_task', emoji: '🔍', title: 'Completa una tarea sin multitasking', science: 'El multitasking reduce el IQ equivalente a 10 puntos (Rosen, 2008)', xp: 15 },
+    { id: 'sleep_alarm', emoji: '🌙', title: 'Programa tu hora de dormir hoy a las 10:30 p.m. o antes', science: 'Dormir 7–9h optimiza la limpieza de toxinas cerebrales (Walker, 2017)', xp: 15 },
+    { id: 'journal_3min', emoji: '📝', title: 'Escribe en tu diario durante 3 minutos sin parar', science: 'Escritura expresiva reduce cortisol 23% (Pennebaker, 1997)', xp: 15 },
+    { id: 'move_break', emoji: '🏃', title: 'Haz 5 minutos de movimiento cada hora de trabajo', science: 'El sedentarismo reduce el flujo sanguíneo cerebral 20%', xp: 15 },
+    { id: 'say_no', emoji: '🚫', title: 'Di no a una solicitud que no se alinea con tus prioridades', science: 'Los límites saludables protegen el capital cognitivo y energético', xp: 20 },
+    { id: 'review_goals', emoji: '📋', title: 'Revisa tus metas activas y avanza en una acción pequeña', science: 'La revisión frecuente activa el efecto Zeigarnik de enfoque', xp: 15 },
+    { id: 'hydrate', emoji: '💧', title: 'Bebe 2 litros de agua distribuidos en el día', science: 'Deshidratación del 1–2% reduce el rendimiento cognitivo', xp: 10 },
+    { id: 'sun_exposure', emoji: '☀️', title: 'Exponerte a la luz solar en los primeros 30 min de tu día', science: 'Regula el cortisol y la melatonina (Huberman, 2021)', xp: 15 },
+    { id: 'night_review', emoji: '✅', title: 'Antes de dormir, anota tus 3 logros del día', science: 'El cierre diario reduce la rumiación nocturna (Zeigarnik effect)', xp: 10 },
+    { id: 'week_plan', emoji: '🗓️', title: 'Dedica 10 minutos a planificar mañana', science: 'La planificación previa reduce la carga cognitiva del día siguiente', xp: 15 },
+    { id: 'affirmation_act', emoji: '💪', title: 'Escribe una fortaleza tuya y cómo la usarás hoy', science: 'Autoafirmación conductual aumenta resiliencia (Sherman, 2013)', xp: 10 },
+    { id: 'digital_sunset', emoji: '🌇', title: 'Sin pantallas azules 1h antes de dormir', science: 'La luz azul retrasa melatonina hasta 3h (Harvard Health)', xp: 15 },
+    { id: 'habit_stack', emoji: '🔗', title: 'Une un hábito nuevo a uno ya existente hoy', science: 'Habit stacking es la estrategia más eficiente de adopción (Clear, 2018)', xp: 20 },
+    { id: 'creative_10', emoji: '🎨', title: 'Dedica 10 min a algo creativo sin objetivo de resultado', science: 'La creatividad sin presión genera insight y reduce estrés', xp: 10 },
+    { id: 'negative_vis', emoji: '🌂', title: 'Piensa en qué podría fallar hoy y cómo lo manejarías', science: 'La visualización negativa aumenta la preparación (Estoicismo + Oettingen)', xp: 10 },
+    { id: 'minimize_decis', emoji: '🎽', title: 'Elimina una decisión trivial de tu día', science: 'La fatiga de decisión reduce la fuerza de voluntad (Baumeister)', xp: 10 },
+    { id: 'posture_check', emoji: '🧍', title: 'Corrige tu postura cada vez que lo recuerdes hoy', science: 'La postura erguida aumenta testosterona y reduce cortisol (Carney, 2010)', xp: 10 },
+    { id: 'celebrate_small', emoji: '🎉', title: 'Celébrra un pequeño logro de hoy en voz alta o por escrito', science: 'Las micro-celebraciones refuerzan el circuito de recompensa dopaminérgico', xp: 10 },
+];
+
+export function getDailyChallenge() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now - start) / 86400000);
+    return DAILY_CHALLENGES[dayOfYear % DAILY_CHALLENGES.length];
+}
+
 function _getGam() {
     return store.get('gamification') || { xp: 0, level: 1, achievements: [], totalXPEarned: 0 };
 }
