@@ -10,7 +10,7 @@
 // 3. Crea credencial → "ID de cliente de OAuth 2.0" → "Aplicación web"
 // 4. En "Orígenes autorizados" agrega: http://localhost:9999
 // 5. Copia el Client ID aquí:
-export const GOOGLE_CLIENT_ID = '';  // Ej: "1234567890-abc.apps.googleusercontent.com"
+export const GOOGLE_CLIENT_ID = '157514360177-tgnl8n3vk2lvd2lithr2n0pblo4rlbs0.apps.googleusercontent.com';
 
 // ----------------------------------------------------------------
 // FIREBASE (para autenticación por TELÉFONO / SMS)

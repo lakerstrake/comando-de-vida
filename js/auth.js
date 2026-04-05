@@ -4,8 +4,14 @@ import { escapeHtml, showToast } from './ui.js';
 import { initFirebase } from './firebase-config.js';
 import { GOOGLE_CLIENT_ID, firebaseConfig } from './config.js';
 
-const USERS_KEY  = 'CV2_USERS';
-const SESSION_KEY = 'CV2_SESSION';
+const USERS_KEY   = 'CV2_USERS';
+const SESSION_KEY  = 'CV2_SESSION';
+const GID_KEY      = 'CV2_GOOGLE_CID';   // user-configured Google Client ID
+
+/** Runtime Google Client ID: config.js OR user-saved in localStorage */
+function getGoogleClientId() {
+    return localStorage.getItem(GID_KEY) || GOOGLE_CLIENT_ID || '';
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -47,27 +53,109 @@ function onAuthSuccess(user) {
 
 // ─── Setup instructions modal (shown when credentials not configured) ─────────
 
+function showGoogleSetupModal(onSuccess) {
+    const saved = localStorage.getItem(GID_KEY) || '';
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(2,8,22,0.82);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;backdrop-filter:blur(14px)';
+    overlay.innerHTML = `
+        <div style="background:rgba(8,16,36,0.97);border:1px solid rgba(75,145,255,0.3);border-radius:22px;padding:30px 28px 26px;max-width:420px;width:100%;box-shadow:0 32px 80px rgba(0,0,0,0.6);position:relative;overflow:hidden">
+            <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 5%,rgba(66,133,244,0.8) 40%,rgba(15,186,132,0.5) 70%,transparent 95%)"></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+                <div style="width:40px;height:40px;border-radius:10px;background:rgba(66,133,244,0.12);border:1px solid rgba(66,133,244,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                </div>
+                <div>
+                    <h3 style="margin:0;font-size:1rem;font-weight:700;color:#e8f0ff;letter-spacing:-0.02em">Activar Google Sign-In</h3>
+                    <p style="margin:0;font-size:0.78rem;color:rgba(130,165,225,0.7)">Solo necesitas un Client ID (gratis)</p>
+                </div>
+            </div>
+
+            <div style="background:rgba(75,145,255,0.06);border:1px solid rgba(75,145,255,0.15);border-radius:12px;padding:14px 16px;margin-bottom:18px">
+                <p style="margin:0 0 8px;font-size:0.8rem;font-weight:600;color:rgba(180,210,255,0.9)">3 pasos rápidos:</p>
+                <ol style="margin:0;padding-left:18px;font-size:0.79rem;color:rgba(140,175,225,0.8);line-height:1.7">
+                    <li>Ve a <strong style="color:#7cb3ff">console.cloud.google.com/apis/credentials</strong></li>
+                    <li>Crea OAuth 2.0 → App Web → Agrega <code style="background:rgba(75,145,255,0.15);padding:1px 5px;border-radius:4px;font-size:0.76rem">${location.origin}</code> como origen</li>
+                    <li>Copia el <strong style="color:#7cb3ff">Client ID</strong> y pégalo abajo</li>
+                </ol>
+            </div>
+
+            <input type="text" id="_gcid-input" placeholder="123456789-abc.apps.googleusercontent.com"
+                value="${saved}"
+                style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:11px;border:1px solid rgba(75,145,255,0.25);background:rgba(255,255,255,0.05);color:#e8f0ff;font-size:0.85rem;font-family:inherit;margin-bottom:10px;outline:none;transition:border-color 0.2s">
+            <div id="_gcid-error" style="display:none;font-size:0.78rem;color:#f87171;margin-bottom:8px;padding:8px 10px;background:rgba(239,68,68,0.1);border-radius:8px;border:1px solid rgba(239,68,68,0.2)"></div>
+
+            <div style="display:flex;gap:8px">
+                <button id="_gcid-cancel" style="flex:1;padding:11px;border-radius:11px;border:1px solid rgba(75,145,255,0.18);background:rgba(75,145,255,0.07);color:rgba(150,190,255,0.85);font-size:0.875rem;cursor:pointer;font-weight:600;font-family:inherit">Cancelar</button>
+                <button id="_gcid-save" style="flex:2;padding:11px;border-radius:11px;border:none;background:linear-gradient(135deg,#3b78f5,#2563eb);color:#fff;font-size:0.875rem;cursor:pointer;font-weight:700;font-family:inherit;box-shadow:0 4px 16px rgba(59,120,245,0.35)">Guardar y continuar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('#_gcid-input');
+    const errEl = overlay.querySelector('#_gcid-error');
+
+    input.addEventListener('focus', () => { input.style.borderColor = 'rgba(75,145,255,0.6)'; });
+    input.addEventListener('blur',  () => { input.style.borderColor = 'rgba(75,145,255,0.25)'; });
+
+    overlay.querySelector('#_gcid-cancel').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    overlay.querySelector('#_gcid-save').addEventListener('click', () => {
+        const val = input.value.trim();
+        if (!val || !val.includes('.apps.googleusercontent.com')) {
+            errEl.textContent = 'Pega un Client ID válido (termina en .apps.googleusercontent.com)';
+            errEl.style.display = 'block';
+            return;
+        }
+        localStorage.setItem(GID_KEY, val);
+        overlay.remove();
+        showToast('Google configurado. Iniciando sesión…', 'info');
+        if (typeof onSuccess === 'function') onSuccess();
+    });
+
+    setTimeout(() => input.focus(), 100);
+}
+
 function showSetupModal(method) {
     const instructions = {
         google: {
-            title: 'Configurar Google Sign-In',
+            title: 'Activar Google Sign-In',
             steps: [
-                'Ve a <strong>console.cloud.google.com/apis/credentials</strong>',
-                'Crea un proyecto (o usa uno existente)',
-                'Crea <em>ID de cliente OAuth 2.0</em> → <em>Aplicación web</em>',
-                'En "Orígenes autorizados" agrega: <code>http://localhost:9999</code>',
-                'Copia el <strong>Client ID</strong> y pégalo en <code>js/config.js</code>',
-                'Recarga la página'
+                'Ve a <strong>console.firebase.google.com</strong>',
+                'Crea o selecciona un proyecto → <em>Authentication</em>',
+                'En <em>Métodos de inicio de sesión</em> activa <strong>Google</strong>',
+                'En Configuración del proyecto → tu app web, copia los datos de Firebase',
+                'Pégalos en <code>js/config.js</code> bajo <code>firebaseConfig</code>',
+                'Recarga la página — ¡listo!'
+            ]
+        },
+        'google-firebase': {
+            title: 'Habilitar Google en Firebase',
+            steps: [
+                'Ve a <strong>console.firebase.google.com</strong> → tu proyecto',
+                'Authentication → <em>Sign-in method</em>',
+                'Haz clic en <strong>Google</strong> → actívalo',
+                'Guarda y recarga la página'
+            ]
+        },
+        'firebase-domain': {
+            title: 'Agregar dominio autorizado',
+            steps: [
+                'Ve a <strong>console.firebase.google.com</strong> → tu proyecto',
+                'Authentication → <em>Settings</em> → <em>Authorized domains</em>',
+                'Agrega el dominio donde corre la app (ej: <code>localhost</code>)',
+                'Guarda y recarga la página'
             ]
         },
         phone: {
-            title: 'Configurar autenticación por Teléfono',
+            title: 'Activar autenticación por Teléfono',
             steps: [
                 'Ve a <strong>console.firebase.google.com</strong>',
                 'Crea un proyecto → <em>Authentication</em> → <em>Métodos de inicio de sesión</em>',
                 'Activa <strong>Teléfono</strong>',
-                'Ve a Configuración del proyecto y copia los datos de la app web',
-                'Pégalos en <code>js/config.js</code> bajo <em>firebaseConfig</em>',
+                'En Configuración del proyecto, copia los datos de la app web',
+                'Pégalos en <code>js/config.js</code> bajo <code>firebaseConfig</code>',
                 'Recarga la página'
             ]
         }
@@ -78,16 +166,16 @@ function showSetupModal(method) {
 
     // Create overlay inline
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;backdrop-filter:blur(4px)';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(4,10,22,0.72);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;backdrop-filter:blur(12px)';
     overlay.innerHTML = `
-        <div style="background:#fff;border-radius:12px;padding:28px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-            <h3 style="margin:0 0 8px;font-size:1.1rem;font-weight:700;color:#1e293b">${info.title}</h3>
-            <p style="margin:0 0 16px;font-size:0.875rem;color:#64748b">Este método requiere configuración previa. Sigue estos pasos:</p>
-            <ol style="margin:0 0 20px;padding:0;list-style:none;font-size:0.875rem;color:#334155">
+        <div style="background:rgba(10,18,36,0.96);border:1px solid rgba(75,145,255,0.28);border-radius:20px;padding:28px 28px 24px;max-width:440px;width:100%;box-shadow:0 28px 70px rgba(0,0,0,0.55)">
+            <h3 style="margin:0 0 6px;font-size:1.05rem;font-weight:700;color:#e8f0ff;letter-spacing:-0.02em">${info.title}</h3>
+            <p style="margin:0 0 18px;font-size:0.825rem;color:rgba(140,175,225,0.75);line-height:1.5">Sigue estos pasos rápidos:</p>
+            <ol style="margin:0 0 22px;padding:0;list-style:none;font-size:0.85rem;color:rgba(200,220,255,0.85);display:flex;flex-direction:column;gap:10px">
                 ${steps}
             </ol>
             <div style="display:flex;gap:8px;justify-content:flex-end">
-                <button id="_setup-close" style="padding:8px 20px;border-radius:6px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569;font-size:0.875rem;cursor:pointer;font-weight:500">Cerrar</button>
+                <button id="_setup-close" style="padding:9px 22px;border-radius:10px;border:1px solid rgba(75,145,255,0.25);background:rgba(75,145,255,0.1);color:rgba(160,200,255,0.9);font-size:0.875rem;cursor:pointer;font-weight:600;font-family:inherit;transition:all 0.2s">Entendido</button>
             </div>
         </div>
     `;
@@ -141,87 +229,86 @@ export const auth = {
     },
 
     _renderLoginHTML() {
-        const isRegister   = this._mode === 'register';
-        const googleReady  = !!GOOGLE_CLIENT_ID;
-        const phoneReady   = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
-        const notReadyCls  = 'login-btn-disabled';
+        const isRegister  = this._mode === 'register';
+        const fbReady     = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
+        const googleReady = fbReady || !!getGoogleClientId();
 
         return `
         <div class="login-card">
-            <div class="login-logo">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="#818cf8" stroke-width="2" fill="rgba(129,140,248,0.1)"/>
-                    <path d="M2 17l10 5 10-5" stroke="#6366f1" stroke-width="2"/>
-                    <path d="M2 12l10 5 10-5" stroke="#a5b4fc" stroke-width="2"/>
-                </svg>
-            </div>
-            <h1 class="login-title">Comando Vida 2.0</h1>
-            <p class="login-subtitle">Tu centro de mando personal basado en neurociencia</p>
 
-            <!-- Google -->
-            <button class="login-btn-google${googleReady ? '' : ' ' + notReadyCls}" id="auth-google-btn">
-                <svg width="18" height="18" viewBox="0 0 48 48">
+            <!-- Logo & branding -->
+            <div class="login-logo">
+                <div class="login-logo-mark">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="#4b91ff" stroke-width="1.75" fill="rgba(75,145,255,0.12)"/>
+                        <path d="M2 17l10 5 10-5" stroke="#4b91ff" stroke-width="1.75"/>
+                        <path d="M2 12l10 5 10-5" stroke="#0fba84" stroke-width="1.75"/>
+                    </svg>
+                </div>
+                <h1 class="login-title">Comando Vida</h1>
+                <p class="login-subtitle">Tu centro de mando basado en neurociencia</p>
+            </div>
+
+            <!-- Social auth -->
+            <button class="login-btn-google" id="auth-google-btn">
+                <svg width="20" height="20" viewBox="0 0 48 48">
                     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
                     <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
                     <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                     <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
                 </svg>
-                <span>Continuar con Google${googleReady ? '' : ' (requiere configuración)'}</span>
+                <span>Continuar con Google</span>
             </button>
 
-            <!-- Phone -->
-            <button class="login-btn-phone${phoneReady ? '' : ' ' + notReadyCls}" id="auth-phone-btn">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-                    <line x1="12" y1="18" x2="12.01" y2="18"/>
+            <!-- Phone auth (optional) -->
+            <button class="login-btn-phone${fbReady ? '' : ' login-btn-disabled'}" id="auth-phone-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
                 </svg>
-                <span>Continuar con Tel&eacute;fono${phoneReady ? '' : ' (requiere configuración)'}</span>
+                <span>Continuar con Tel&eacute;fono${fbReady ? '' : ' — requiere Firebase'}</span>
             </button>
 
             <!-- Phone form -->
             <div class="phone-verify-form" id="phone-form" style="display:none">
-                <div class="form-group">
-                    <input type="tel" class="login-input" id="auth-phone-number" placeholder="+52 1234567890" autocomplete="tel">
-                </div>
-                <button class="login-btn-primary" id="auth-send-code-btn">Enviar c&oacute;digo SMS</button>
-                <div id="phone-code-section" style="display:none">
-                    <div class="form-group" style="margin-top:12px">
-                        <input type="text" class="login-input" id="auth-phone-code" placeholder="C&oacute;digo de 6 d&iacute;gitos" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
-                    </div>
-                    <button class="login-btn-primary" id="auth-verify-code-btn">Verificar c&oacute;digo</button>
+                <input type="tel" class="login-input" id="auth-phone-number" placeholder="+57 300 000 0000" autocomplete="tel" style="margin-bottom:8px">
+                <button class="login-btn-primary" id="auth-send-code-btn" style="height:40px;font-size:0.85rem">Enviar SMS</button>
+                <div id="phone-code-section" style="display:none;margin-top:10px">
+                    <input type="text" class="login-input" id="auth-phone-code" placeholder="C&oacute;digo de 6 d&iacute;gitos" maxlength="6" inputmode="numeric" autocomplete="one-time-code" style="margin-bottom:8px">
+                    <button class="login-btn-primary" id="auth-verify-code-btn" style="height:40px;font-size:0.85rem">Verificar c&oacute;digo</button>
                 </div>
                 <div id="recaptcha-container"></div>
             </div>
 
-            <div class="login-divider"><span>o inicia con email</span></div>
+            <!-- Email divider -->
+            <div class="login-divider"><span>o con email</span></div>
 
+            <!-- Email form -->
             <form class="login-form" id="auth-email-form" novalidate>
-                ${isRegister ? `
-                <div class="form-group">
-                    <input type="text" class="login-input" id="auth-name" placeholder="Tu nombre" autocomplete="name" required>
-                </div>` : ''}
-                <div class="form-group">
-                    <input type="email" class="login-input" id="auth-email" placeholder="Email" autocomplete="email" required>
-                </div>
-                <div class="form-group" style="position:relative">
-                    <input type="password" class="login-input" id="auth-password" placeholder="Contrase&ntilde;a (m&iacute;nimo 6 caracteres)" autocomplete="${isRegister ? 'new-password' : 'current-password'}" required minlength="6" style="padding-right:44px">
-                    <button type="button" id="toggle-password" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px">
-                        <svg id="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                ${isRegister ? `<input type="text" class="login-input" id="auth-name" placeholder="Tu nombre" autocomplete="name" required autofocus>` : ''}
+                <input type="email" class="login-input" id="auth-email" placeholder="Email" autocomplete="email" required ${!isRegister ? 'autofocus' : ''}>
+                <div style="position:relative">
+                    <input type="password" class="login-input" id="auth-password"
+                        placeholder="${isRegister ? 'Contraseña (mín. 6 caracteres)' : 'Contraseña'}"
+                        autocomplete="${isRegister ? 'new-password' : 'current-password'}"
+                        required minlength="6" style="padding-right:46px">
+                    <button type="button" id="toggle-password" style="position:absolute;right:13px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(120,155,210,0.6);padding:4px;display:flex;align-items:center">
+                        <svg id="eye-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
                         </svg>
                     </button>
                 </div>
-                <div class="login-error" id="auth-error" style="display:none"></div>
+                ${!isRegister ? `<div style="text-align:right;margin-top:-4px"><button type="button" id="auth-forgot-btn" style="background:none;border:none;font-size:0.78rem;color:rgba(100,145,220,0.75);cursor:pointer;padding:2px 0;font-family:inherit;transition:color 0.2s">¿Olvidaste tu contraseña?</button></div>` : ''}
+                <div class="login-error" id="auth-error"></div>
                 <button type="submit" class="login-btn-primary" id="auth-submit-btn">
-                    ${isRegister ? 'Crear Cuenta' : 'Iniciar Sesi&oacute;n'}
+                    ${isRegister ? 'Crear cuenta' : 'Iniciar sesi&oacute;n'}
                 </button>
                 <button type="button" class="login-btn-secondary" id="auth-switch-btn">
-                    ${isRegister ? 'Ya tengo cuenta — Iniciar Sesi&oacute;n' : '&iquest;Sin cuenta? Reg&iacute;strate'}
+                    ${isRegister ? '¿Ya tienes cuenta? Inicia sesi&oacute;n' : '¿Nuevo aquí? Crea tu cuenta gratis'}
                 </button>
             </form>
 
-            <div class="login-divider"><span></span></div>
-            <a href="#" class="login-skip" id="auth-skip-btn">Continuar sin cuenta</a>
+            <!-- Guest -->
+            <a href="#" class="login-skip" id="auth-skip-btn">Continuar sin cuenta &rarr;</a>
         </div>
         `;
     },
@@ -238,8 +325,12 @@ export const auth = {
         const btn = document.getElementById(btnId);
         if (!btn) return;
         btn.disabled = loading;
-        if (loading) btn.dataset.orig = btn.textContent;
-        else if (btn.dataset.orig) btn.textContent = btn.dataset.orig;
+        if (loading) {
+            btn.dataset.orig = btn.innerHTML;
+            btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Cargando…</span>`;
+        } else if (btn.dataset.orig) {
+            btn.innerHTML = btn.dataset.orig;
+        }
     },
 
     _bindEvents() {
@@ -279,13 +370,22 @@ export const auth = {
 
         // Google
         document.getElementById('auth-google-btn')?.addEventListener('click', () => {
-            if (!GOOGLE_CLIENT_ID) { showSetupModal('google'); return; }
+            const fbReady  = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
+            const gisReady = !!getGoogleClientId();
+            if (!fbReady && !gisReady) {
+                showGoogleSetupModal(() => {
+                    // After user saves their Client ID, re-render then auto-trigger GIS
+                    this.showLoginScreen();
+                    setTimeout(() => this.loginWithGoogle(), 300);
+                });
+                return;
+            }
             this.loginWithGoogle();
         });
 
         // Phone toggle
         document.getElementById('auth-phone-btn')?.addEventListener('click', () => {
-            if (!firebaseConfig.apiKey) { showSetupModal('phone'); return; }
+            if (!(firebaseConfig.apiKey && firebaseConfig.projectId)) { showSetupModal('phone'); return; }
             const pf = document.getElementById('phone-form');
             if (pf) pf.style.display = pf.style.display === 'none' ? 'block' : 'none';
         });
@@ -304,10 +404,67 @@ export const auth = {
             else showToast('Ingresa el código de verificación', 'error');
         });
 
+        // Forgot password
+        document.getElementById('auth-forgot-btn')?.addEventListener('click', () => {
+            this._showForgotPassword();
+        });
+
         // Skip
         document.getElementById('auth-skip-btn')?.addEventListener('click', (e) => {
             e.preventDefault();
             this.skipLogin();
+        });
+    },
+
+    _showForgotPassword() {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(4,10,22,0.72);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;backdrop-filter:blur(12px)';
+        overlay.innerHTML = `
+            <div style="background:rgba(10,18,36,0.96);border:1px solid rgba(75,145,255,0.28);border-radius:20px;padding:28px;max-width:380px;width:100%;box-shadow:0 28px 70px rgba(0,0,0,0.55)">
+                <h3 style="margin:0 0 6px;font-size:1rem;font-weight:700;color:#e8f0ff;letter-spacing:-0.02em">Restablecer contraseña</h3>
+                <p style="margin:0 0 18px;font-size:0.825rem;color:rgba(140,175,225,0.7);line-height:1.5">Ingresa tu email y crea una nueva contraseña.</p>
+                <input type="email" id="_fp-email" placeholder="Email" autocomplete="email"
+                    style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid rgba(75,145,255,0.22);background:rgba(255,255,255,0.05);color:#e8f0ff;font-size:0.875rem;font-family:inherit;margin-bottom:10px;outline:none">
+                <input type="password" id="_fp-newpass" placeholder="Nueva contraseña (mín. 6 caracteres)" autocomplete="new-password"
+                    style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid rgba(75,145,255,0.22);background:rgba(255,255,255,0.05);color:#e8f0ff;font-size:0.875rem;font-family:inherit;margin-bottom:10px;outline:none">
+                <div id="_fp-error" style="display:none;padding:9px 12px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);border-radius:8px;color:#f87171;font-size:0.8rem;margin-bottom:10px"></div>
+                <div id="_fp-success" style="display:none;padding:9px 12px;background:rgba(15,186,132,0.12);border:1px solid rgba(15,186,132,0.25);border-radius:8px;color:#34d399;font-size:0.8rem;margin-bottom:10px"></div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+                    <button id="_fp-cancel" style="padding:9px 18px;border-radius:10px;border:1px solid rgba(75,145,255,0.2);background:rgba(75,145,255,0.08);color:rgba(160,200,255,0.85);font-size:0.85rem;cursor:pointer;font-weight:600;font-family:inherit">Cancelar</button>
+                    <button id="_fp-submit" style="padding:9px 18px;border-radius:10px;border:none;background:linear-gradient(135deg,#3b78f5,#2563eb);color:#fff;font-size:0.85rem;cursor:pointer;font-weight:700;font-family:inherit">Restablecer</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const showErr = (msg) => {
+            const el = overlay.querySelector('#_fp-error');
+            el.textContent = msg; el.style.display = 'block';
+        };
+
+        overlay.querySelector('#_fp-cancel').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+        overlay.querySelector('#_fp-submit').addEventListener('click', async () => {
+            overlay.querySelector('#_fp-error').style.display = 'none';
+            const email   = overlay.querySelector('#_fp-email').value.trim();
+            const newPass = overlay.querySelector('#_fp-newpass').value;
+            if (!email || !validateEmail(email)) { showErr('Ingresa un email válido'); return; }
+            if (!newPass || newPass.length < 6)  { showErr('La contraseña debe tener al menos 6 caracteres'); return; }
+
+            const users = getUsers();
+            const idx   = users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+            if (idx === -1) { showErr('No existe una cuenta con ese email'); return; }
+
+            const btn = overlay.querySelector('#_fp-submit');
+            btn.disabled = true; btn.textContent = 'Guardando…';
+            users[idx].passwordHash = await hashPassword(newPass);
+            saveUsers(users);
+
+            const suc = overlay.querySelector('#_fp-success');
+            suc.textContent = '¡Contraseña actualizada! Ya puedes iniciar sesión.';
+            suc.style.display = 'block';
+            setTimeout(() => overlay.remove(), 2200);
         });
     },
 
@@ -363,16 +520,78 @@ export const auth = {
         onAuthSuccess(session);
     },
 
-    // ── Google Sign-In (Google Identity Services) ─────────────────────────────
+    // ── Google Sign-In ────────────────────────────────────────────────────────
+    // Method 1 (preferred): Firebase Auth with Google Provider — only needs Firebase config
+    // Method 2 (fallback):  Google Identity Services (GIS) — needs separate Client ID
 
     loginWithGoogle() {
-        const handleCredential = (response) => {
-            const payload = decodeJWT(response.credential);
-            if (!payload) { showToast('Error al procesar respuesta de Google', 'error'); return; }
+        const fbReady = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
 
+        // Method 1: Firebase Google Auth (simpler — same config as phone auth)
+        if (fbReady && window.firebase?.apps?.length) {
+            const btn = document.getElementById('auth-google-btn');
+            if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Conectando…'; }
+
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.addScope('profile');
+            provider.addScope('email');
+
+            firebase.auth().signInWithPopup(provider)
+                .then(result => {
+                    const u = result.user;
+                    const session = {
+                        userId:    u.uid,
+                        name:      u.displayName || u.email?.split('@')[0] || 'Usuario',
+                        email:     u.email || '',
+                        photoURL:  u.photoURL || '',
+                        method:    'google',
+                        loggedInAt: new Date().toISOString()
+                    };
+                    saveSession(session);
+                    showToast(`¡Bienvenido, ${escapeHtml(session.name)}!`);
+                    onAuthSuccess(session);
+                })
+                .catch(err => {
+                    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Continuar con Google'; }
+                    const ignorable = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request'];
+                    if (ignorable.includes(err.code)) return;
+                    if (err.code === 'auth/unauthorized-domain') {
+                        showSetupModal('firebase-domain');
+                    } else if (err.code === 'auth/operation-not-allowed') {
+                        showSetupModal('google-firebase');
+                    } else {
+                        showToast(err.message || 'Error al iniciar sesión con Google', 'error');
+                    }
+                });
+            return;
+        }
+
+        // Method 2: Google Identity Services (GIS)
+        const gid = getGoogleClientId();
+        if (!gid) {
+            showGoogleSetupModal(() => {
+                this.showLoginScreen();
+                setTimeout(() => this.loginWithGoogle(), 300);
+            });
+            return;
+        }
+        this._loginWithGIS();
+    },
+
+    _loginWithGIS() {
+        const handleCredential = (response) => {
+            if (!response || !response.credential) {
+                showToast('No se recibió credencial de Google', 'error');
+                return;
+            }
+            const payload = decodeJWT(response.credential);
+            if (!payload) {
+                showToast('Error al procesar respuesta de Google', 'error');
+                return;
+            }
             const session = {
                 userId:    payload.sub,
-                name:      payload.name || payload.email.split('@')[0],
+                name:      payload.name || payload.email?.split('@')[0] || 'Usuario',
                 email:     payload.email || '',
                 photoURL:  payload.picture || '',
                 method:    'google',
@@ -390,40 +609,63 @@ export const auth = {
                 return;
             }
             google.accounts.id.initialize({
-                client_id: GOOGLE_CLIENT_ID,
+                client_id: getGoogleClientId(),
                 callback:  handleCredential,
                 auto_select: false,
                 cancel_on_tap_outside: true
             });
+            // Try to show the native prompt first
             google.accounts.id.prompt((notification) => {
                 if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                    // One Tap not shown — render a popup button fallback
-                    this._showGooglePopup(handleCredential);
+                    // Fallback to custom popup
+                    setTimeout(() => this._showGooglePopup(handleCredential), 300);
                 }
             });
         };
-
         tryGIS();
     },
 
     _showGooglePopup(callback) {
-        // Create a temporary container for GSI button and auto-click it
         const container = document.createElement('div');
-        container.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);z-index:9999;backdrop-filter:blur(4px)';
+        container.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:9999;backdrop-filter:blur(8px)';
         container.innerHTML = `
-            <div style="background:#fff;border-radius:12px;padding:28px 32px;text-align:center;max-width:320px">
-                <p style="margin:0 0 16px;font-weight:600;color:#1e293b">Selecciona tu cuenta de Google</p>
-                <div id="_gsi-btn-container"></div>
-                <button id="_gsi-cancel" style="margin-top:12px;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:0.875rem">Cancelar</button>
+            <div style="background:rgba(10,18,36,0.95);border:1px solid rgba(75,145,255,0.3);border-radius:20px;padding:32px;text-align:center;max-width:300px;box-shadow:0 24px 60px rgba(0,0,0,0.5)">
+                <p style="margin:0 0 20px;font-weight:700;font-size:1rem;color:#e8f0ff;font-family:var(--font-display)">Selecciona tu cuenta</p>
+                <div id="_gsi-btn-container" style="display:flex;justify-content:center"></div>
+                <button id="_gsi-cancel" style="margin-top:16px;background:none;border:none;color:rgba(100,130,180,0.65);cursor:pointer;font-size:0.825rem;font-family:var(--font-primary)">Cancelar</button>
             </div>
         `;
         document.body.appendChild(container);
 
-        google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: (res) => { container.remove(); callback(res); } });
-        google.accounts.id.renderButton(document.getElementById('_gsi-btn-container'), { theme: 'outline', size: 'large', text: 'signin_with', width: 240 });
+        const handleClose = () => {
+            container.remove();
+        };
 
-        container.querySelector('#_gsi-cancel')?.addEventListener('click', () => container.remove());
-        container.addEventListener('click', (e) => { if (e.target === container) container.remove(); });
+        // Initialize with callback that closes popup and processes credential
+        google.accounts.id.initialize({
+            client_id: getGoogleClientId(),
+            callback: (response) => {
+                handleClose();
+                if (typeof callback === 'function') {
+                    callback(response);
+                }
+            },
+            auto_select: false,
+            cancel_on_tap_outside: false
+        });
+
+        // Render the button
+        google.accounts.id.renderButton(document.getElementById('_gsi-btn-container'), {
+            theme: 'outline',
+            size: 'large',
+            text: 'signin_with',
+            width: 240
+        });
+
+        container.querySelector('#_gsi-cancel')?.addEventListener('click', handleClose);
+        container.addEventListener('click', (e) => {
+            if (e.target === container) handleClose();
+        });
     },
 
     // ── Phone (Firebase) ──────────────────────────────────────────────────────

@@ -1,0 +1,13 @@
+{
+  "name": "comando-vida",
+  "version": "2.0.0",
+  "description": "PWA de gestión de vida basada en neurociencia",
+  "private": true,
+  "scripts": {
+    "start": "npx serve . --listen 3000 --no-clipboard",
+    "dev": "npx serve . --listen 3000",
+    "serve": "npx serve ."
+  },
+  "keywords": ["pwa", "habits", "life-management"],
+  "license": "UNLICENSED"
+}

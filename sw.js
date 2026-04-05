@@ -1,5 +1,5 @@
 // Service Worker - Comando Vida 2.0
-const CACHE_NAME = 'comando-vida-v18';
+const CACHE_NAME = 'comando-vida-v23';
 const ASSETS = [
     './',
     './index.html',
