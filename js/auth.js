@@ -1,12 +1,16 @@
 // auth.js - Authentication module for Comando Vida 2.0
 import { store } from './store.js';
 import { escapeHtml, showToast } from './ui.js';
-import { initFirebase } from './firebase-config.js';
+import { initFirebase, waitForFirebase } from './firebase-config.js';
 import { GOOGLE_CLIENT_ID, firebaseConfig } from './config.js';
 
 const USERS_KEY   = 'CV2_USERS';
 const SESSION_KEY  = 'CV2_SESSION';
 const GID_KEY      = 'CV2_GOOGLE_CID';   // user-configured Google Client ID
+
+// Control de carga de scripts
+let _gisLoadPromise = null;
+let _gisReady = false;
 
 /** Runtime Google Client ID: config.js OR user-saved in localStorage */
 function getGoogleClientId() {
@@ -191,11 +195,15 @@ export const auth = {
     _mode: 'login',
     _phoneConfirmation: null,
     _recaptchaVerifier: null,
-    _gisLoaded: false,
 
-    init() {
+    async init() {
+        // Inicializar Firebase de forma asíncrona
         initFirebase();
-        this._loadGIS();
+        
+        // Precargar GIS en background si hay un Client ID
+        if (getGoogleClientId()) {
+            this._loadGIS().catch(e => console.warn('GIS preload failed:', e));
+        }
 
         const session = getSession();
         if (session) {
@@ -207,14 +215,37 @@ export const auth = {
 
     /** Dynamically load Google Identity Services script */
     _loadGIS() {
-        if (document.getElementById('gis-script')) return;
-        const script = document.createElement('script');
-        script.id  = 'gis-script';
-        script.src = 'https://accounts.google.com/gsi/client';
-        script.async = true;
-        script.defer = true;
-        script.onload = () => { this._gisLoaded = true; };
-        document.head.appendChild(script);
+        if (_gisReady) return Promise.resolve(true);
+        if (_gisLoadPromise) return _gisLoadPromise;
+
+        _gisLoadPromise = new Promise((resolve) => {
+            if (document.getElementById('gis-script')) {
+                _gisReady = true;
+                resolve(true);
+                return;
+            }
+            const script = document.createElement('script');
+            script.id  = 'gis-script';
+            script.src = 'https://accounts.google.com/gsi/client';
+            script.async = true;
+            script.defer = true;
+            script.onload = () => { _gisReady = true; resolve(true); };
+            script.onerror = () => { console.error('Error loading GIS'); resolve(false); };
+            
+            // Timeout fallback: si no carga en 8 segundos, continuar
+            const timeout = setTimeout(() => {
+                resolve(_gisReady || false);
+            }, 8000);
+            
+            script.onload = function() {
+                clearTimeout(timeout);
+                _gisReady = true;
+                resolve(true);
+            };
+            
+            document.head.appendChild(script);
+        });
+        return _gisLoadPromise;
     },
 
     showLoginScreen() {
@@ -475,18 +506,26 @@ export const auth = {
         if (!password || password.length < 6) { this._showError('La contraseña debe tener al menos 6 caracteres'); return; }
 
         this._setLoading('auth-submit-btn', true);
-        const users        = getUsers();
-        const passwordHash = await hashPassword(password);
-        const user         = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-        this._setLoading('auth-submit-btn', false);
+        
+        try {
+            const users        = getUsers();
+            const passwordHash = await hashPassword(password);
+            const user         = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+            
+            this._setLoading('auth-submit-btn', false);
 
-        if (!user) { this._showError('No existe una cuenta con ese email. ¿Deseas registrarte?'); return; }
-        if (user.passwordHash !== passwordHash) { this._showError('Contraseña incorrecta'); return; }
+            if (!user) { this._showError('No existe una cuenta con ese email. ¿Deseas registrarte?'); return; }
+            if (user.passwordHash !== passwordHash) { this._showError('Contraseña incorrecta'); return; }
 
-        const session = { userId: user.id, name: user.name, email: user.email, method: 'email', loggedInAt: new Date().toISOString() };
-        saveSession(session);
-        showToast(`¡Bienvenido de vuelta, ${escapeHtml(user.name)}!`);
-        onAuthSuccess(session);
+            const session = { userId: user.id, name: user.name, email: user.email, method: 'email', loggedInAt: new Date().toISOString() };
+            saveSession(session);
+            showToast(`¡Bienvenido de vuelta, ${escapeHtml(user.name)}!`);
+            onAuthSuccess(session);
+        } catch (err) {
+            this._setLoading('auth-submit-btn', false);
+            this._showError('Error al iniciar sesión. Intenta de nuevo.');
+            console.error('Login error:', err);
+        }
     },
 
     async registerWithEmail(email, password, name) {
@@ -501,23 +540,30 @@ export const auth = {
         }
 
         this._setLoading('auth-submit-btn', true);
-        const passwordHash = await hashPassword(password);
-        this._setLoading('auth-submit-btn', false);
+        
+        try {
+            const passwordHash = await hashPassword(password);
+            this._setLoading('auth-submit-btn', false);
 
-        const newUser = {
-            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 11),
-            email: email.toLowerCase(),
-            name: name.trim(),
-            passwordHash,
-            createdAt: new Date().toISOString()
-        };
-        users.push(newUser);
-        saveUsers(users);
+            const newUser = {
+                id: Date.now().toString(36) + Math.random().toString(36).slice(2, 11),
+                email: email.toLowerCase(),
+                name: name.trim(),
+                passwordHash,
+                createdAt: new Date().toISOString()
+            };
+            users.push(newUser);
+            saveUsers(users);
 
-        const session = { userId: newUser.id, name: newUser.name, email: newUser.email, method: 'email', loggedInAt: new Date().toISOString() };
-        saveSession(session);
-        showToast(`¡Bienvenido, ${escapeHtml(newUser.name)}! Cuenta creada.`);
-        onAuthSuccess(session);
+            const session = { userId: newUser.id, name: newUser.name, email: newUser.email, method: 'email', loggedInAt: new Date().toISOString() };
+            saveSession(session);
+            showToast(`¡Bienvenido, ${escapeHtml(newUser.name)}! Cuenta creada.`);
+            onAuthSuccess(session);
+        } catch (err) {
+            this._setLoading('auth-submit-btn', false);
+            this._showError('Error al crear cuenta. Intenta de nuevo.');
+            console.error('Register error:', err);
+        }
     },
 
     // ── Google Sign-In ────────────────────────────────────────────────────────
@@ -575,7 +621,20 @@ export const auth = {
             });
             return;
         }
-        this._loginWithGIS();
+        
+        // Cargar GIS antes de intentar login
+        const btn = document.getElementById('auth-google-btn');
+        if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Conectando…'; }
+        
+        this._loadGIS().then(loaded => {
+            if (btn) btn.disabled = false;
+            if (loaded) {
+                this._loginWithGIS();
+            } else {
+                if (btn) btn.querySelector('span').textContent = 'Continuar con Google';
+                showToast('No se pudo cargar Google Sign-In. Intenta de nuevo.', 'error');
+            }
+        });
     },
 
     _loginWithGIS() {
@@ -602,26 +661,49 @@ export const auth = {
             onAuthSuccess(session);
         };
 
-        const tryGIS = () => {
-            if (!window.google?.accounts?.id) {
-                showToast('Cargando Google Sign-In…', 'info');
-                setTimeout(tryGIS, 800);
-                return;
-            }
-            google.accounts.id.initialize({
-                client_id: getGoogleClientId(),
-                callback:  handleCredential,
-                auto_select: false,
-                cancel_on_tap_outside: true
-            });
-            // Try to show the native prompt first
-            google.accounts.id.prompt((notification) => {
-                if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                    // Fallback to custom popup
-                    setTimeout(() => this._showGooglePopup(handleCredential), 300);
+        const tryGIS = async () => {
+            const maxAttempts = 10;
+            let attempts = 0;
+            
+            while (attempts < maxAttempts) {
+                if (window.google?.accounts?.id) {
+                    // Google está disponible
+                    try {
+                        google.accounts.id.initialize({
+                            client_id: getGoogleClientId(),
+                            callback:  handleCredential,
+                            auto_select: false,
+                            cancel_on_tap_outside: true
+                        });
+                        // Intentar mostrar el prompt nativo
+                        google.accounts.id.prompt((notification) => {
+                            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                                // Usar popup personalizado como fallback
+                                setTimeout(() => this._showGooglePopup(handleCredential), 300);
+                            }
+                        });
+                        return;
+                    } catch (err) {
+                        console.error('Error initializing GIS:', err);
+                        showToast('Error con Google Sign-In. Intenta de nuevo.', 'error');
+                        return;
+                    }
                 }
-            });
+                
+                attempts++;
+                if (attempts === 1) {
+                    showToast('Cargando Google Sign-In…', 'info');
+                }
+                
+                // Esperar un poco antes de reintentar
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            // Si llegamos aquí, Google no se cargó después de varios intentos
+            console.warn('GIS did not load after', maxAttempts, 'attempts');
+            showToast('Google Sign-In tardó demasiado. Usa otro método de login.', 'error');
         };
+        
         tryGIS();
     },
 
@@ -675,22 +757,38 @@ export const auth = {
             showSetupModal('phone');
             return;
         }
+        
+        // Mostrar estado de carga
+        const btn = document.getElementById('auth-send-code-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+        
         if (!this._recaptchaVerifier) {
             this._recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
                 size: 'invisible',
                 callback: () => {}
             });
         }
+        
+        const timeout = setTimeout(() => {
+            if (btn) { btn.disabled = false; btn.textContent = 'Enviar SMS'; }
+            showToast('Envío de SMS tardó demasiado. Intenta de nuevo.', 'error');
+            this._recaptchaVerifier = null;
+        }, 15000);
+        
         firebase.auth().signInWithPhoneNumber(phoneNumber, this._recaptchaVerifier)
             .then((confirmationResult) => {
+                clearTimeout(timeout);
                 this._phoneConfirmation = confirmationResult;
                 document.getElementById('phone-code-section').style.display = 'block';
+                if (btn) { btn.disabled = false; btn.textContent = 'Enviar SMS'; }
                 showToast('Código SMS enviado. Revisa tu teléfono.', 'info');
             })
             .catch((error) => {
+                clearTimeout(timeout);
+                if (btn) { btn.disabled = false; btn.textContent = 'Enviar SMS'; }
                 this._recaptchaVerifier = null;
                 const msgs = {
-                    'auth/invalid-phone-number': 'Número de teléfono inválido. Usa formato +52 XXXXXXXXXX',
+                    'auth/invalid-phone-number': 'Número de teléfono inválido. Usa formato +57 3001234567',
                     'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde.',
                     'auth/captcha-check-failed': 'Verificación reCAPTCHA fallida. Recarga la página.'
                 };
@@ -700,8 +798,18 @@ export const auth = {
 
     verifyPhoneCode(code) {
         if (!this._phoneConfirmation) { showToast('Primero solicita el código SMS', 'error'); return; }
+        
+        const btn = document.getElementById('auth-verify-code-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Verificando…'; }
+        
+        const timeout = setTimeout(() => {
+            if (btn) { btn.disabled = false; btn.textContent = 'Verificar código'; }
+            showToast('Verificación tardó demasiado. Intenta de nuevo.', 'error');
+        }, 10000);
+        
         this._phoneConfirmation.confirm(code)
             .then((result) => {
+                clearTimeout(timeout);
                 const u = result.user;
                 const session = { userId: u.uid, name: u.displayName || 'Usuario', email: u.email || '', phone: u.phoneNumber || '', method: 'phone', loggedInAt: new Date().toISOString() };
                 saveSession(session);
@@ -709,6 +817,8 @@ export const auth = {
                 onAuthSuccess(session);
             })
             .catch((error) => {
+                clearTimeout(timeout);
+                if (btn) { btn.disabled = false; btn.textContent = 'Verificar código'; }
                 const msgs = {
                     'auth/invalid-verification-code': 'Código incorrecto. Intenta de nuevo.',
                     'auth/code-expired': 'El código ha expirado. Solicita uno nuevo.'
