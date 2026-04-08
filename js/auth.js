@@ -1,8 +1,14 @@
 // auth.js - Authentication module for Comando Vida 2.0
 import { store } from './store.js';
 import { escapeHtml, showToast } from './ui.js';
-import { initFirebase, waitForFirebase } from './firebase-config.js';
-import { GOOGLE_CLIENT_ID, firebaseConfig } from './config.js';
+import {
+    initFirebase,
+    waitForFirebase,
+    getFirebaseConfig,
+    isFirebaseConfigured,
+    saveFirebaseRuntimeConfig
+} from './firebase-config.js';
+import { GOOGLE_CLIENT_ID } from './config.js';
 
 const USERS_KEY   = 'CV2_USERS';
 const SESSION_KEY  = 'CV2_SESSION';
@@ -15,6 +21,16 @@ let _gisReady = false;
 /** Runtime Google Client ID: config.js OR user-saved in localStorage */
 function getGoogleClientId() {
     return localStorage.getItem(GID_KEY) || GOOGLE_CLIENT_ID || '';
+}
+
+function normalizePhoneNumber(input) {
+    if (!input) return '';
+    const raw = input.trim();
+    const cleaned = raw.replace(/[^\d+]/g, '');
+    const digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned;
+
+    if (!/^\d{8,15}$/.test(digits)) return '';
+    return `+${digits}`;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -121,6 +137,76 @@ function showGoogleSetupModal(onSuccess) {
     setTimeout(() => input.focus(), 100);
 }
 
+function showFirebaseSetupModal(onSuccess) {
+    const current = getFirebaseConfig();
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(2,8,22,0.84);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;backdrop-filter:blur(14px)';
+    overlay.innerHTML = `
+        <div style="background:rgba(8,16,36,0.97);border:1px solid rgba(59,130,246,0.28);border-radius:22px;padding:26px 24px;max-width:520px;width:100%;box-shadow:0 32px 80px rgba(0,0,0,0.6);position:relative;overflow:hidden">
+            <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 5%,rgba(59,130,246,0.9) 45%,rgba(15,186,132,0.65) 70%,transparent 95%)"></div>
+            <h3 style="margin:0 0 8px;font-size:1.05rem;font-weight:700;color:#e8f0ff;letter-spacing:-0.02em">Configurar Firebase para Google y Telefono</h3>
+            <p style="margin:0 0 14px;font-size:0.8rem;color:rgba(148,185,240,0.8);line-height:1.45">Pega la configuracion web de Firebase. Campos requeridos: <strong>apiKey</strong>, <strong>authDomain</strong>, <strong>projectId</strong>, <strong>appId</strong>.</p>
+
+            <textarea id="_fb-json" spellcheck="false" style="width:100%;min-height:180px;max-height:280px;resize:vertical;padding:12px;border-radius:12px;border:1px solid rgba(75,145,255,0.28);background:rgba(255,255,255,0.05);color:#dbeafe;font-size:0.8rem;line-height:1.45;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;outline:none">${escapeHtml(JSON.stringify(current, null, 2))}</textarea>
+
+            <div id="_fb-error" style="display:none;margin-top:10px;padding:9px 10px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.28);border-radius:9px;font-size:0.78rem;color:#fda4af"></div>
+            <div id="_fb-success" style="display:none;margin-top:10px;padding:9px 10px;background:rgba(15,186,132,0.12);border:1px solid rgba(15,186,132,0.28);border-radius:9px;font-size:0.78rem;color:#6ee7b7"></div>
+
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+                <button id="_fb-cancel" style="padding:10px 16px;border-radius:10px;border:1px solid rgba(75,145,255,0.22);background:rgba(75,145,255,0.08);color:rgba(168,206,255,0.9);font-size:0.85rem;cursor:pointer;font-weight:600;font-family:inherit">Cancelar</button>
+                <button id="_fb-save" style="padding:10px 16px;border-radius:10px;border:none;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;font-size:0.85rem;cursor:pointer;font-weight:700;font-family:inherit;box-shadow:0 4px 14px rgba(37,99,235,0.35)">Guardar configuracion</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const jsonInput = overlay.querySelector('#_fb-json');
+    const errorEl = overlay.querySelector('#_fb-error');
+    const successEl = overlay.querySelector('#_fb-success');
+
+    const showErr = (msg) => {
+        successEl.style.display = 'none';
+        errorEl.textContent = msg;
+        errorEl.style.display = 'block';
+    };
+
+    overlay.querySelector('#_fb-cancel').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+    overlay.querySelector('#_fb-save').addEventListener('click', () => {
+        errorEl.style.display = 'none';
+        successEl.style.display = 'none';
+
+        let parsed = null;
+        try {
+            parsed = JSON.parse(jsonInput.value);
+        } catch {
+            showErr('El JSON no es valido. Revisa comas y comillas.');
+            return;
+        }
+
+        if (!saveFirebaseRuntimeConfig(parsed)) {
+            showErr('Faltan campos requeridos: apiKey, authDomain, projectId y appId.');
+            return;
+        }
+
+        const initialized = initFirebase();
+        if (!initialized) {
+            showErr('Se guardo la configuracion, pero Firebase aun no inicia. Recarga la pagina e intenta de nuevo.');
+            return;
+        }
+
+        successEl.textContent = 'Firebase configurado correctamente. Ya puedes usar Google y Telefono.';
+        successEl.style.display = 'block';
+        setTimeout(() => {
+            overlay.remove();
+            if (typeof onSuccess === 'function') onSuccess();
+        }, 550);
+    });
+
+    setTimeout(() => jsonInput.focus(), 90);
+}
+
 function showSetupModal(method) {
     const instructions = {
         google: {
@@ -130,7 +216,7 @@ function showSetupModal(method) {
                 'Crea o selecciona un proyecto → <em>Authentication</em>',
                 'En <em>Métodos de inicio de sesión</em> activa <strong>Google</strong>',
                 'En Configuración del proyecto → tu app web, copia los datos de Firebase',
-                'Pégalos en <code>js/config.js</code> bajo <code>firebaseConfig</code>',
+                'Guardalos desde el boton <strong>Configurar Firebase</strong> del login',
                 'Recarga la página — ¡listo!'
             ]
         },
@@ -159,7 +245,7 @@ function showSetupModal(method) {
                 'Crea un proyecto → <em>Authentication</em> → <em>Métodos de inicio de sesión</em>',
                 'Activa <strong>Teléfono</strong>',
                 'En Configuración del proyecto, copia los datos de la app web',
-                'Pégalos en <code>js/config.js</code> bajo <code>firebaseConfig</code>',
+                'Guardalos desde el boton <strong>Configurar Firebase</strong> del login',
                 'Recarga la página'
             ]
         }
@@ -260,86 +346,105 @@ export const auth = {
     },
 
     _renderLoginHTML() {
-        const isRegister  = this._mode === 'register';
-        const fbReady     = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
-        const googleReady = fbReady || !!getGoogleClientId();
+        const isRegister = this._mode === 'register';
+        const firebaseReady = isFirebaseConfigured();
+        const googleReady = firebaseReady || !!getGoogleClientId();
 
         return `
-        <div class="login-card">
+        <div class="login-layout">
+            <div class="login-card">
 
-            <!-- Logo & branding -->
-            <div class="login-logo">
-                <div class="login-logo-mark">
-                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="#4b91ff" stroke-width="1.75" fill="rgba(75,145,255,0.12)"/>
-                        <path d="M2 17l10 5 10-5" stroke="#4b91ff" stroke-width="1.75"/>
-                        <path d="M2 12l10 5 10-5" stroke="#0fba84" stroke-width="1.75"/>
-                    </svg>
-                </div>
-                <h1 class="login-title">Comando Vida</h1>
-                <p class="login-subtitle">Tu centro de mando basado en neurociencia</p>
-            </div>
-
-            <!-- Social auth -->
-            <button class="login-btn-google" id="auth-google-btn">
-                <svg width="20" height="20" viewBox="0 0 48 48">
-                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-                </svg>
-                <span>Continuar con Google</span>
-            </button>
-
-            <!-- Phone auth (optional) -->
-            <button class="login-btn-phone${fbReady ? '' : ' login-btn-disabled'}" id="auth-phone-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
-                </svg>
-                <span>Continuar con Tel&eacute;fono${fbReady ? '' : ' — requiere Firebase'}</span>
-            </button>
-
-            <!-- Phone form -->
-            <div class="phone-verify-form" id="phone-form" style="display:none">
-                <input type="tel" class="login-input" id="auth-phone-number" placeholder="+57 300 000 0000" autocomplete="tel" style="margin-bottom:8px">
-                <button class="login-btn-primary" id="auth-send-code-btn" style="height:40px;font-size:0.85rem">Enviar SMS</button>
-                <div id="phone-code-section" style="display:none;margin-top:10px">
-                    <input type="text" class="login-input" id="auth-phone-code" placeholder="C&oacute;digo de 6 d&iacute;gitos" maxlength="6" inputmode="numeric" autocomplete="one-time-code" style="margin-bottom:8px">
-                    <button class="login-btn-primary" id="auth-verify-code-btn" style="height:40px;font-size:0.85rem">Verificar c&oacute;digo</button>
-                </div>
-                <div id="recaptcha-container"></div>
-            </div>
-
-            <!-- Email divider -->
-            <div class="login-divider"><span>o con email</span></div>
-
-            <!-- Email form -->
-            <form class="login-form" id="auth-email-form" novalidate>
-                ${isRegister ? `<input type="text" class="login-input" id="auth-name" placeholder="Tu nombre" autocomplete="name" required autofocus>` : ''}
-                <input type="email" class="login-input" id="auth-email" placeholder="Email" autocomplete="email" required ${!isRegister ? 'autofocus' : ''}>
-                <div style="position:relative">
-                    <input type="password" class="login-input" id="auth-password"
-                        placeholder="${isRegister ? 'Contraseña (mín. 6 caracteres)' : 'Contraseña'}"
-                        autocomplete="${isRegister ? 'new-password' : 'current-password'}"
-                        required minlength="6" style="padding-right:46px">
-                    <button type="button" id="toggle-password" style="position:absolute;right:13px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(120,155,210,0.6);padding:4px;display:flex;align-items:center">
-                        <svg id="eye-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                <div class="login-logo">
+                    <div class="login-logo-mark">
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="#4b91ff" stroke-width="1.75" fill="rgba(75,145,255,0.12)"/>
+                            <path d="M2 17l10 5 10-5" stroke="#4b91ff" stroke-width="1.75"/>
+                            <path d="M2 12l10 5 10-5" stroke="#0fba84" stroke-width="1.75"/>
                         </svg>
-                    </button>
+                    </div>
+                    <h1 class="login-title">Comando Vida</h1>
+                    <p class="login-subtitle">Centro de mando personal para enfoque, habitos y progreso real.</p>
                 </div>
-                ${!isRegister ? `<div style="text-align:right;margin-top:-4px"><button type="button" id="auth-forgot-btn" style="background:none;border:none;font-size:0.78rem;color:rgba(100,145,220,0.75);cursor:pointer;padding:2px 0;font-family:inherit;transition:color 0.2s">¿Olvidaste tu contraseña?</button></div>` : ''}
-                <div class="login-error" id="auth-error"></div>
-                <button type="submit" class="login-btn-primary" id="auth-submit-btn">
-                    ${isRegister ? 'Crear cuenta' : 'Iniciar sesi&oacute;n'}
-                </button>
-                <button type="button" class="login-btn-secondary" id="auth-switch-btn">
-                    ${isRegister ? '¿Ya tienes cuenta? Inicia sesi&oacute;n' : '¿Nuevo aquí? Crea tu cuenta gratis'}
-                </button>
-            </form>
 
-            <!-- Guest -->
-            <a href="#" class="login-skip" id="auth-skip-btn">Continuar sin cuenta &rarr;</a>
+                <div class="login-status-row">
+                    <span class="auth-chip ${googleReady ? 'is-ready' : 'is-missing'}">
+                        Google ${googleReady ? 'listo' : 'pendiente'}
+                    </span>
+                    <span class="auth-chip ${firebaseReady ? 'is-ready' : 'is-missing'}">
+                        Telefono ${firebaseReady ? 'listo' : 'requiere Firebase'}
+                    </span>
+                </div>
+
+                <button class="login-btn-google" id="auth-google-btn">
+                    <svg width="20" height="20" viewBox="0 0 48 48">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                    </svg>
+                    <span>Continuar con Google</span>
+                </button>
+
+                <button type="button" class="login-btn-phone${firebaseReady ? '' : ' login-btn-disabled'}" id="auth-phone-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+                    </svg>
+                    <span>Continuar con Telefono</span>
+                </button>
+
+                <button type="button" class="login-btn-secondary login-btn-setup" id="auth-firebase-setup-btn">
+                    ${firebaseReady ? 'Actualizar configuracion de Firebase' : 'Configurar Firebase ahora'}
+                </button>
+
+                <div class="phone-verify-form" id="phone-form" style="display:none">
+                    <input type="tel" class="login-input" id="auth-phone-number" placeholder="+573001234567" autocomplete="tel" style="margin-bottom:8px">
+                    <button class="login-btn-primary" id="auth-send-code-btn" style="height:40px;font-size:0.85rem">Enviar SMS</button>
+                    <div id="phone-code-section" style="display:none;margin-top:10px">
+                        <input type="text" class="login-input" id="auth-phone-code" placeholder="Codigo de 6 digitos" maxlength="6" inputmode="numeric" autocomplete="one-time-code" style="margin-bottom:8px">
+                        <button class="login-btn-primary" id="auth-verify-code-btn" style="height:40px;font-size:0.85rem">Verificar codigo</button>
+                    </div>
+                    <p class="phone-hint">Formato internacional E.164. Ejemplo: +573001234567</p>
+                    <div id="recaptcha-container"></div>
+                </div>
+
+                <div class="login-divider"><span>o con email</span></div>
+
+                <form class="login-form" id="auth-email-form" novalidate>
+                    ${isRegister ? `<input type="text" class="login-input" id="auth-name" placeholder="Tu nombre" autocomplete="name" required autofocus>` : ''}
+                    <input type="email" class="login-input" id="auth-email" placeholder="Email" autocomplete="email" required ${!isRegister ? 'autofocus' : ''}>
+                    <div style="position:relative">
+                        <input type="password" class="login-input" id="auth-password"
+                            placeholder="${isRegister ? 'Contrasena (min. 6 caracteres)' : 'Contrasena'}"
+                            autocomplete="${isRegister ? 'new-password' : 'current-password'}"
+                            required minlength="6" style="padding-right:46px">
+                        <button type="button" id="toggle-password" style="position:absolute;right:13px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(120,155,210,0.6);padding:4px;display:flex;align-items:center">
+                            <svg id="eye-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                    ${!isRegister ? `<div style="text-align:right;margin-top:-4px"><button type="button" id="auth-forgot-btn" style="background:none;border:none;font-size:0.78rem;color:rgba(100,145,220,0.75);cursor:pointer;padding:2px 0;font-family:inherit;transition:color 0.2s">Olvide mi contrasena</button></div>` : ''}
+                    <div class="login-error" id="auth-error"></div>
+                    <button type="submit" class="login-btn-primary" id="auth-submit-btn">
+                        ${isRegister ? 'Crear cuenta' : 'Iniciar sesion'}
+                    </button>
+                    <button type="button" class="login-btn-secondary" id="auth-switch-btn">
+                        ${isRegister ? 'Ya tienes cuenta? Inicia sesion' : 'Nuevo aqui? Crea tu cuenta gratis'}
+                    </button>
+                </form>
+
+                <a href="#" class="login-skip" id="auth-skip-btn">Continuar sin cuenta &rarr;</a>
+            </div>
+
+            <aside class="login-side-panel">
+                <h2>Plataforma mejorada</h2>
+                <p>Sincroniza tu avance diario con una experiencia mas rapida, clara y enfocada.</p>
+                <ul>
+                    <li>Login con Google y Telefono</li>
+                    <li>Dashboard optimizado para foco diario</li>
+                    <li>Diseno responsive en desktop y movil</li>
+                </ul>
+            </aside>
         </div>
         `;
     },
@@ -401,11 +506,10 @@ export const auth = {
 
         // Google
         document.getElementById('auth-google-btn')?.addEventListener('click', () => {
-            const fbReady  = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
+            const fbReady = isFirebaseConfigured();
             const gisReady = !!getGoogleClientId();
             if (!fbReady && !gisReady) {
                 showGoogleSetupModal(() => {
-                    // After user saves their Client ID, re-render then auto-trigger GIS
                     this.showLoginScreen();
                     setTimeout(() => this.loginWithGoogle(), 300);
                 });
@@ -414,9 +518,16 @@ export const auth = {
             this.loginWithGoogle();
         });
 
+        document.getElementById('auth-firebase-setup-btn')?.addEventListener('click', () => {
+            showFirebaseSetupModal(() => this.showLoginScreen());
+        });
+
         // Phone toggle
         document.getElementById('auth-phone-btn')?.addEventListener('click', () => {
-            if (!(firebaseConfig.apiKey && firebaseConfig.projectId)) { showSetupModal('phone'); return; }
+            if (!isFirebaseConfigured()) {
+                showFirebaseSetupModal(() => this.showLoginScreen());
+                return;
+            }
             const pf = document.getElementById('phone-form');
             if (pf) pf.style.display = pf.style.display === 'none' ? 'block' : 'none';
         });
@@ -424,17 +535,17 @@ export const auth = {
         // Send SMS code
         document.getElementById('auth-send-code-btn')?.addEventListener('click', () => {
             const phone = document.getElementById('auth-phone-number')?.value.trim();
-            if (phone) this.loginWithPhone(phone);
-            else showToast('Ingresa tu número de teléfono', 'error');
+            const normalizedPhone = normalizePhoneNumber(phone);
+            if (normalizedPhone) this.loginWithPhone(normalizedPhone);
+            else showToast('Ingresa un telefono valido en formato internacional. Ejemplo: +573001234567', 'error');
         });
 
         // Verify SMS code
         document.getElementById('auth-verify-code-btn')?.addEventListener('click', () => {
             const code = document.getElementById('auth-phone-code')?.value.trim();
-            if (code) this.verifyPhoneCode(code);
-            else showToast('Ingresa el código de verificación', 'error');
+            if (/^\d{6}$/.test(code || '')) this.verifyPhoneCode(code);
+            else showToast('Ingresa un codigo valido de 6 digitos', 'error');
         });
-
         // Forgot password
         document.getElementById('auth-forgot-btn')?.addEventListener('click', () => {
             this._showForgotPassword();
@@ -571,12 +682,17 @@ export const auth = {
     // Method 2 (fallback):  Google Identity Services (GIS) — needs separate Client ID
 
     loginWithGoogle() {
-        const fbReady = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
+        const firebaseInitialized = initFirebase();
+        const fbReady = isFirebaseConfigured() && (firebaseInitialized || window.firebase?.apps?.length);
 
-        // Method 1: Firebase Google Auth (simpler — same config as phone auth)
+        // Method 1: Firebase Google Auth (same setup used for phone auth)
         if (fbReady && window.firebase?.apps?.length) {
             const btn = document.getElementById('auth-google-btn');
-            if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Conectando…'; }
+            if (btn) {
+                btn.disabled = true;
+                const label = btn.querySelector('span');
+                if (label) label.textContent = 'Conectando...';
+            }
 
             const provider = new firebase.auth.GoogleAuthProvider();
             provider.addScope('profile');
@@ -586,19 +702,23 @@ export const auth = {
                 .then(result => {
                     const u = result.user;
                     const session = {
-                        userId:    u.uid,
-                        name:      u.displayName || u.email?.split('@')[0] || 'Usuario',
-                        email:     u.email || '',
-                        photoURL:  u.photoURL || '',
-                        method:    'google',
+                        userId: u.uid,
+                        name: u.displayName || u.email?.split('@')[0] || 'Usuario',
+                        email: u.email || '',
+                        photoURL: u.photoURL || '',
+                        method: 'google',
                         loggedInAt: new Date().toISOString()
                     };
                     saveSession(session);
-                    showToast(`¡Bienvenido, ${escapeHtml(session.name)}!`);
+                    showToast(`Bienvenido, ${escapeHtml(session.name)}!`);
                     onAuthSuccess(session);
                 })
                 .catch(err => {
-                    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Continuar con Google'; }
+                    if (btn) {
+                        btn.disabled = false;
+                        const label = btn.querySelector('span');
+                        if (label) label.textContent = 'Continuar con Google';
+                    }
                     const ignorable = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request'];
                     if (ignorable.includes(err.code)) return;
                     if (err.code === 'auth/unauthorized-domain') {
@@ -606,7 +726,7 @@ export const auth = {
                     } else if (err.code === 'auth/operation-not-allowed') {
                         showSetupModal('google-firebase');
                     } else {
-                        showToast(err.message || 'Error al iniciar sesión con Google', 'error');
+                        showToast(err.message || 'Error al iniciar sesion con Google', 'error');
                     }
                 });
             return;
@@ -615,23 +735,33 @@ export const auth = {
         // Method 2: Google Identity Services (GIS)
         const gid = getGoogleClientId();
         if (!gid) {
-            showGoogleSetupModal(() => {
-                this.showLoginScreen();
-                setTimeout(() => this.loginWithGoogle(), 300);
-            });
+            if (isFirebaseConfigured()) {
+                showSetupModal('google-firebase');
+            } else {
+                showGoogleSetupModal(() => {
+                    this.showLoginScreen();
+                    setTimeout(() => this.loginWithGoogle(), 300);
+                });
+            }
             return;
         }
-        
-        // Cargar GIS antes de intentar login
+
         const btn = document.getElementById('auth-google-btn');
-        if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Conectando…'; }
-        
+        if (btn) {
+            btn.disabled = true;
+            const label = btn.querySelector('span');
+            if (label) label.textContent = 'Conectando...';
+        }
+
         this._loadGIS().then(loaded => {
             if (btn) btn.disabled = false;
             if (loaded) {
                 this._loginWithGIS();
             } else {
-                if (btn) btn.querySelector('span').textContent = 'Continuar con Google';
+                if (btn) {
+                    const label = btn.querySelector('span');
+                    if (label) label.textContent = 'Continuar con Google';
+                }
                 showToast('No se pudo cargar Google Sign-In. Intenta de nuevo.', 'error');
             }
         });
@@ -752,81 +882,111 @@ export const auth = {
 
     // ── Phone (Firebase) ──────────────────────────────────────────────────────
 
-    loginWithPhone(phoneNumber) {
-        if (!window.firebase || !firebase.apps?.length) {
-            showSetupModal('phone');
+    async loginWithPhone(phoneNumber) {
+        const normalizedPhone = normalizePhoneNumber(phoneNumber);
+        if (!normalizedPhone) {
+            showToast('Ingresa un telefono valido en formato internacional (E.164).', 'error');
             return;
         }
-        
-        // Mostrar estado de carga
-        const btn = document.getElementById('auth-send-code-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
-        
-        if (!this._recaptchaVerifier) {
-            this._recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-                size: 'invisible',
-                callback: () => {}
-            });
+
+        const ready = await waitForFirebase(7000);
+        if (!ready || !window.firebase || !firebase.apps?.length) {
+            showFirebaseSetupModal(() => this.showLoginScreen());
+            return;
         }
-        
-        const timeout = setTimeout(() => {
-            if (btn) { btn.disabled = false; btn.textContent = 'Enviar SMS'; }
-            showToast('Envío de SMS tardó demasiado. Intenta de nuevo.', 'error');
+
+        const btn = document.getElementById('auth-send-code-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Enviando...';
+        }
+
+        try {
+            if (!this._recaptchaVerifier) {
+                this._recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+                    size: 'invisible',
+                    callback: () => {}
+                });
+                await this._recaptchaVerifier.render();
+            }
+
+            const confirmationResult = await firebase.auth().signInWithPhoneNumber(normalizedPhone, this._recaptchaVerifier);
+            this._phoneConfirmation = confirmationResult;
+
+            const codeSection = document.getElementById('phone-code-section');
+            if (codeSection) codeSection.style.display = 'block';
+
+            showToast('Codigo SMS enviado. Revisa tu telefono.', 'info');
+        } catch (error) {
+            const msgs = {
+                'auth/invalid-phone-number': 'Numero de telefono invalido. Usa formato +573001234567.',
+                'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos e intenta otra vez.',
+                'auth/captcha-check-failed': 'No se pudo validar reCAPTCHA. Recarga la pagina.',
+                'auth/quota-exceeded': 'Se alcanzo la cuota de SMS del proyecto Firebase.'
+            };
+
+            if (this._recaptchaVerifier && typeof this._recaptchaVerifier.clear === 'function') {
+                this._recaptchaVerifier.clear();
+            }
             this._recaptchaVerifier = null;
-        }, 15000);
-        
-        firebase.auth().signInWithPhoneNumber(phoneNumber, this._recaptchaVerifier)
-            .then((confirmationResult) => {
-                clearTimeout(timeout);
-                this._phoneConfirmation = confirmationResult;
-                document.getElementById('phone-code-section').style.display = 'block';
-                if (btn) { btn.disabled = false; btn.textContent = 'Enviar SMS'; }
-                showToast('Código SMS enviado. Revisa tu teléfono.', 'info');
-            })
-            .catch((error) => {
-                clearTimeout(timeout);
-                if (btn) { btn.disabled = false; btn.textContent = 'Enviar SMS'; }
-                this._recaptchaVerifier = null;
-                const msgs = {
-                    'auth/invalid-phone-number': 'Número de teléfono inválido. Usa formato +57 3001234567',
-                    'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde.',
-                    'auth/captcha-check-failed': 'Verificación reCAPTCHA fallida. Recarga la página.'
-                };
-                showToast(msgs[error.code] || 'Error al enviar SMS: ' + (error.message || 'Intenta de nuevo'), 'error');
-            });
+            showToast(msgs[error.code] || ('Error al enviar SMS: ' + (error.message || 'Intenta de nuevo')), 'error');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Enviar SMS';
+            }
+        }
     },
 
     verifyPhoneCode(code) {
-        if (!this._phoneConfirmation) { showToast('Primero solicita el código SMS', 'error'); return; }
-        
+        if (!this._phoneConfirmation) {
+            showToast('Primero solicita el codigo SMS.', 'error');
+            return;
+        }
+
+        const normalizedCode = (code || '').trim();
+        if (!/^\d{6}$/.test(normalizedCode)) {
+            showToast('El codigo debe tener 6 digitos.', 'error');
+            return;
+        }
+
         const btn = document.getElementById('auth-verify-code-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Verificando…'; }
-        
-        const timeout = setTimeout(() => {
-            if (btn) { btn.disabled = false; btn.textContent = 'Verificar código'; }
-            showToast('Verificación tardó demasiado. Intenta de nuevo.', 'error');
-        }, 10000);
-        
-        this._phoneConfirmation.confirm(code)
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Verificando...';
+        }
+
+        this._phoneConfirmation.confirm(normalizedCode)
             .then((result) => {
-                clearTimeout(timeout);
                 const u = result.user;
-                const session = { userId: u.uid, name: u.displayName || 'Usuario', email: u.email || '', phone: u.phoneNumber || '', method: 'phone', loggedInAt: new Date().toISOString() };
+                const session = {
+                    userId: u.uid,
+                    name: u.displayName || 'Usuario',
+                    email: u.email || '',
+                    phone: u.phoneNumber || '',
+                    method: 'phone',
+                    loggedInAt: new Date().toISOString()
+                };
+
                 saveSession(session);
-                showToast(`¡Bienvenido, ${escapeHtml(session.name)}!`);
+                this._phoneConfirmation = null;
+                showToast(`Bienvenido, ${escapeHtml(session.name)}!`);
                 onAuthSuccess(session);
             })
             .catch((error) => {
-                clearTimeout(timeout);
-                if (btn) { btn.disabled = false; btn.textContent = 'Verificar código'; }
                 const msgs = {
-                    'auth/invalid-verification-code': 'Código incorrecto. Intenta de nuevo.',
-                    'auth/code-expired': 'El código ha expirado. Solicita uno nuevo.'
+                    'auth/invalid-verification-code': 'Codigo incorrecto. Intenta de nuevo.',
+                    'auth/code-expired': 'El codigo expiro. Solicita uno nuevo.'
                 };
-                showToast(msgs[error.code] || 'Error al verificar código', 'error');
+                showToast(msgs[error.code] || 'Error al verificar codigo', 'error');
+            })
+            .finally(() => {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Verificar codigo';
+                }
             });
     },
-
     // ── Guest ─────────────────────────────────────────────────────────────────
 
     skipLogin() {
@@ -856,3 +1016,5 @@ export const auth = {
     getCurrentUser() { return getSession(); },
     isLoggedIn()     { return getSession() !== null; }
 };
+
+
