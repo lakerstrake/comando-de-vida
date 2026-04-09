@@ -53,14 +53,15 @@ self.addEventListener('activate', (event) => {
 // Fetch - cache first, then network
 self.addEventListener('fetch', (event) => {
     const { request } = event;
+    if (request.method !== 'GET') return;
+
+    const url = new URL(request.url);
+    const isSameOrigin = url.origin === self.location.origin;
+    if (!isSameOrigin) return;
+
     const isNavigation = request.mode === 'navigate';
-    const isSameOrigin = new URL(request.url).origin === self.location.origin;
-    const isStaticAsset = isSameOrigin && (
-        request.destination === 'script' ||
-        request.destination === 'style' ||
-        request.destination === 'image' ||
-        request.destination === 'font'
-    );
+    const isScriptOrStyle = request.destination === 'script' || request.destination === 'style';
+    const isImageOrFont = request.destination === 'image' || request.destination === 'font';
 
     if (isNavigation) {
         // Navigation: network-first so login/app updates are not stuck in stale cache
@@ -78,8 +79,24 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    if (isStaticAsset) {
-        // Static assets: stale-while-revalidate
+    if (isScriptOrStyle) {
+        // Scripts/styles: network-first so broken cached bundles are not reused
+        event.respondWith(
+            fetch(request)
+                .then((response) => {
+                    if (response && response.status === 200) {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+                    }
+                    return response;
+                })
+                .catch(() => caches.match(request))
+        );
+        return;
+    }
+
+    if (isImageOrFont) {
+        // Images/fonts: stale-while-revalidate
         event.respondWith(
             caches.match(request).then((cached) => {
                 const networkFetch = fetch(request)
