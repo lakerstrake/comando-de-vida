@@ -42,10 +42,10 @@ async function hashPassword(password) {
 }
 
 function getUsers()       { try { return JSON.parse(localStorage.getItem(USERS_KEY))  || []; } catch { return []; } }
-function saveUsers(u)     { localStorage.setItem(USERS_KEY,   JSON.stringify(u)); }
+function saveUsers(u)     { try { localStorage.setItem(USERS_KEY,   JSON.stringify(u)); return true; } catch { return false; } }
 function getSession()     { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } }
-function saveSession(s)   { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
-function clearSession()   { localStorage.removeItem(SESSION_KEY); }
+function saveSession(s)   { try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); return true; } catch { return false; } }
+function clearSession()   { try { localStorage.removeItem(SESSION_KEY); } catch {} }
 function validateEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
 
 /** Decode JWT payload (no verification — we trust Google's callback) */
@@ -68,7 +68,22 @@ function onAuthSuccess(user) {
     const app         = document.getElementById('app');
     if (loginScreen) loginScreen.style.display = 'none';
     if (app)         app.style.display = '';
-    if (typeof window.__onAuthReady === 'function') window.__onAuthReady(user);
+    if (typeof window.__onAuthReady === 'function') {
+        try {
+            window.__onAuthReady(user);
+        } catch (error) {
+            console.error('Error after auth success:', error);
+            showToast('Sesion iniciada. Hubo un problema cargando la vista, recargando...', 'info');
+            setTimeout(() => window.location.reload(), 700);
+        }
+    }
+}
+
+function persistSession(session) {
+    const saved = saveSession(session);
+    if (!saved) {
+        showToast('No se pudo guardar la sesion local. Puedes continuar, pero se cerrara al recargar.', 'info');
+    }
 }
 
 // ─── Setup instructions modal (shown when credentials not configured) ─────────
@@ -283,18 +298,24 @@ export const auth = {
     _recaptchaVerifier: null,
 
     async init() {
-        // Inicializar Firebase de forma asíncrona
-        initFirebase();
-        
-        // Precargar GIS en background si hay un Client ID
-        if (getGoogleClientId()) {
-            this._loadGIS().catch(e => console.warn('GIS preload failed:', e));
-        }
+        try {
+            // Inicializar Firebase de forma asincrona
+            initFirebase();
 
-        const session = getSession();
-        if (session) {
-            onAuthSuccess(session);
-        } else {
+            // Precargar GIS en background si hay un Client ID
+            if (getGoogleClientId()) {
+                this._loadGIS().catch(e => console.warn('GIS preload failed:', e));
+            }
+
+            const session = getSession();
+            if (session && session.userId) {
+                onAuthSuccess(session);
+            } else {
+                this.showLoginScreen();
+            }
+        } catch (error) {
+            console.error('Auth init failed:', error);
+            clearSession();
             this.showLoginScreen();
         }
     },
@@ -488,13 +509,18 @@ export const auth = {
         document.getElementById('auth-email-form')?.addEventListener('submit', async (e) => {
             e.preventDefault();
             this._hideError();
-            const email    = document.getElementById('auth-email')?.value.trim();
-            const password = document.getElementById('auth-password')?.value;
-            if (this._mode === 'register') {
-                const name = document.getElementById('auth-name')?.value.trim();
-                await this.registerWithEmail(email, password, name);
-            } else {
-                await this.loginWithEmail(email, password);
+            try {
+                const email = document.getElementById('auth-email')?.value.trim();
+                const password = document.getElementById('auth-password')?.value;
+                if (this._mode === 'register') {
+                    const name = document.getElementById('auth-name')?.value.trim();
+                    await this.registerWithEmail(email, password, name);
+                } else {
+                    await this.loginWithEmail(email, password);
+                }
+            } catch (error) {
+                console.error('Email auth submit failed:', error);
+                this._showError('No se pudo completar el login. Recarga la pagina e intenta de nuevo.');
             }
         });
 
@@ -601,7 +627,12 @@ export const auth = {
             const btn = overlay.querySelector('#_fp-submit');
             btn.disabled = true; btn.textContent = 'Guardando…';
             users[idx].passwordHash = await hashPassword(newPass);
-            saveUsers(users);
+            if (!saveUsers(users)) {
+                showErr('No se pudo guardar el cambio. Revisa permisos del navegador y vuelve a intentar.');
+                btn.disabled = false;
+                btn.textContent = 'Restablecer';
+                return;
+            }
 
             const suc = overlay.querySelector('#_fp-success');
             suc.textContent = '¡Contraseña actualizada! Ya puedes iniciar sesión.';
@@ -629,7 +660,7 @@ export const auth = {
             if (user.passwordHash !== passwordHash) { this._showError('Contraseña incorrecta'); return; }
 
             const session = { userId: user.id, name: user.name, email: user.email, method: 'email', loggedInAt: new Date().toISOString() };
-            saveSession(session);
+            persistSession(session);
             showToast(`¡Bienvenido de vuelta, ${escapeHtml(user.name)}!`);
             onAuthSuccess(session);
         } catch (err) {
@@ -664,10 +695,14 @@ export const auth = {
                 createdAt: new Date().toISOString()
             };
             users.push(newUser);
-            saveUsers(users);
+            if (!saveUsers(users)) {
+                this._setLoading('auth-submit-btn', false);
+                this._showError('No se pudo guardar tu cuenta en este navegador.');
+                return;
+            }
 
             const session = { userId: newUser.id, name: newUser.name, email: newUser.email, method: 'email', loggedInAt: new Date().toISOString() };
-            saveSession(session);
+            persistSession(session);
             showToast(`¡Bienvenido, ${escapeHtml(newUser.name)}! Cuenta creada.`);
             onAuthSuccess(session);
         } catch (err) {
@@ -709,7 +744,7 @@ export const auth = {
                         method: 'google',
                         loggedInAt: new Date().toISOString()
                     };
-                    saveSession(session);
+                    persistSession(session);
                     showToast(`Bienvenido, ${escapeHtml(session.name)}!`);
                     onAuthSuccess(session);
                 })
@@ -786,7 +821,7 @@ export const auth = {
                 method:    'google',
                 loggedInAt: new Date().toISOString()
             };
-            saveSession(session);
+            persistSession(session);
             showToast(`¡Bienvenido, ${escapeHtml(session.name)}!`);
             onAuthSuccess(session);
         };
@@ -968,7 +1003,7 @@ export const auth = {
                     loggedInAt: new Date().toISOString()
                 };
 
-                saveSession(session);
+                persistSession(session);
                 this._phoneConfirmation = null;
                 showToast(`Bienvenido, ${escapeHtml(session.name)}!`);
                 onAuthSuccess(session);
@@ -991,7 +1026,7 @@ export const auth = {
 
     skipLogin() {
         const session = { userId: 'guest', name: 'Invitado', email: '', method: 'guest', loggedInAt: new Date().toISOString() };
-        saveSession(session);
+        persistSession(session);
         showToast('¡Bienvenido! Modo invitado activado.');
         onAuthSuccess(session);
     },
@@ -1016,5 +1051,7 @@ export const auth = {
     getCurrentUser() { return getSession(); },
     isLoggedIn()     { return getSession() !== null; }
 };
+
+
 
 

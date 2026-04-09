@@ -1,5 +1,5 @@
 // Service Worker - Comando Vida 2.0
-const CACHE_NAME = 'comando-vida-v23';
+const CACHE_NAME = 'comando-vida-v24';
 const ASSETS = [
     './',
     './index.html',
@@ -52,23 +52,48 @@ self.addEventListener('activate', (event) => {
 
 // Fetch - cache first, then network
 self.addEventListener('fetch', (event) => {
-    event.respondWith(
-        caches.match(event.request)
-            .then(cached => cached || fetch(event.request)
-                .then(response => {
-                    // Cache new successful requests
-                    if (response.status === 200) {
-                        const clone = response.clone();
-                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+    const { request } = event;
+    const isNavigation = request.mode === 'navigate';
+    const isSameOrigin = new URL(request.url).origin === self.location.origin;
+    const isStaticAsset = isSameOrigin && (
+        request.destination === 'script' ||
+        request.destination === 'style' ||
+        request.destination === 'image' ||
+        request.destination === 'font'
+    );
+
+    if (isNavigation) {
+        // Navigation: network-first so login/app updates are not stuck in stale cache
+        event.respondWith(
+            fetch(request)
+                .then((response) => {
+                    if (response && response.status === 200) {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', copy));
                     }
                     return response;
                 })
-            )
-            .catch(() => {
-                // Offline fallback
-                if (event.request.mode === 'navigate') {
-                    return caches.match('./index.html');
-                }
+                .catch(() => caches.match('./index.html'))
+        );
+        return;
+    }
+
+    if (isStaticAsset) {
+        // Static assets: stale-while-revalidate
+        event.respondWith(
+            caches.match(request).then((cached) => {
+                const networkFetch = fetch(request)
+                    .then((response) => {
+                        if (response && response.status === 200) {
+                            const copy = response.clone();
+                            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+                        }
+                        return response;
+                    })
+                    .catch(() => cached);
+                return cached || networkFetch;
             })
-    );
+        );
+        return;
+    }
 });
