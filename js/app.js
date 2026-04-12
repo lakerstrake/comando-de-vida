@@ -383,5 +383,13 @@ function updateUserMenu(user) {
 document.addEventListener('DOMContentLoaded', () => {
     applyTheme(getSavedTheme());
     applySimpleMode(getSimpleMode());
-    auth.init();
+    
+    // Auth init handles the transition to login or app
+    auth.init().finally(() => {
+        const splash = document.getElementById('splash-screen');
+        if (splash) {
+            splash.style.opacity = '0';
+            setTimeout(() => splash.remove(), 600);
+        }
+    });
 });

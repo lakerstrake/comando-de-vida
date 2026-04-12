@@ -16,8 +16,20 @@
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+    <!-- Splash / Loading -->
+    <div id="splash-screen" class="splash-screen">
+        <div class="splash-content">
+            <div class="splash-logo">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                </svg>
+            </div>
+            <div class="splash-loader"></div>
+        </div>
+    </div>
+
     <!-- Login Screen (shown before auth) -->
-    <div id="login-screen" class="login-screen"></div>
+    <div id="login-screen" class="login-screen" style="display:none"></div>
 
     <div id="app" style="display:none">
         <!-- Sidebar Navigation (Desktop) -->

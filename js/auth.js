@@ -66,15 +66,33 @@ function onAuthSuccess(user) {
     }
     const loginScreen = document.getElementById('login-screen');
     const app         = document.getElementById('app');
-    if (loginScreen) loginScreen.style.display = 'none';
-    if (app)         app.style.display = '';
+    
+    // Smooth transition
+    if (loginScreen) {
+        loginScreen.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+        loginScreen.style.opacity = '0';
+        loginScreen.style.transform = 'scale(1.05)';
+        setTimeout(() => {
+            loginScreen.style.display = 'none';
+            if (app) {
+                app.style.display = 'flex';
+                app.style.opacity = '0';
+                requestAnimationFrame(() => {
+                    app.style.transition = 'opacity 0.6s ease';
+                    app.style.opacity = '1';
+                });
+            }
+        }, 500);
+    } else {
+        if (app) app.style.display = 'flex';
+    }
+
     if (typeof window.__onAuthReady === 'function') {
         try {
             window.__onAuthReady(user);
         } catch (error) {
             console.error('Error after auth success:', error);
-            showToast('Sesion iniciada. Hubo un problema cargando la vista, recargando...', 'info');
-            setTimeout(() => window.location.reload(), 700);
+            showToast('Sesion iniciada. Hubo un problema cargando la vista.', 'info');
         }
     }
 }
@@ -805,7 +823,7 @@ export const auth = {
     _loginWithGIS() {
         const handleCredential = (response) => {
             if (!response || !response.credential) {
-                showToast('No se recibió credencial de Google', 'error');
+                console.warn('Google Sign-In response had no credential');
                 return;
             }
             const payload = decodeJWT(response.credential);
@@ -827,46 +845,9 @@ export const auth = {
         };
 
         const tryGIS = async () => {
-            const maxAttempts = 10;
-            let attempts = 0;
-            
-            while (attempts < maxAttempts) {
-                if (window.google?.accounts?.id) {
-                    // Google está disponible
-                    try {
-                        google.accounts.id.initialize({
-                            client_id: getGoogleClientId(),
-                            callback:  handleCredential,
-                            auto_select: false,
-                            cancel_on_tap_outside: true
-                        });
-                        // Intentar mostrar el prompt nativo
-                        google.accounts.id.prompt((notification) => {
-                            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                                // Usar popup personalizado como fallback
-                                setTimeout(() => this._showGooglePopup(handleCredential), 300);
-                            }
-                        });
-                        return;
-                    } catch (err) {
-                        console.error('Error initializing GIS:', err);
-                        showToast('Error con Google Sign-In. Intenta de nuevo.', 'error');
-                        return;
-                    }
-                }
-                
-                attempts++;
-                if (attempts === 1) {
-                    showToast('Cargando Google Sign-In…', 'info');
-                }
-                
-                // Esperar un poco antes de reintentar
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-            
-            // Si llegamos aquí, Google no se cargó después de varios intentos
-            console.warn('GIS did not load after', maxAttempts, 'attempts');
-            showToast('Google Sign-In tardó demasiado. Usa otro método de login.', 'error');
+            // We just show the fallback popup directly because One Tap is often blocked or confusing
+            // and we already have a dedicated button click that led here.
+            this._showGooglePopup(handleCredential);
         };
         
         tryGIS();
@@ -874,40 +855,80 @@ export const auth = {
 
     _showGooglePopup(callback) {
         const container = document.createElement('div');
-        container.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:9999;backdrop-filter:blur(8px)';
+        container.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,8,22,0.85);z-index:9999;backdrop-filter:blur(12px);animation:overlayIn 0.3s ease forwards';
         container.innerHTML = `
-            <div style="background:rgba(10,18,36,0.95);border:1px solid rgba(75,145,255,0.3);border-radius:20px;padding:32px;text-align:center;max-width:300px;box-shadow:0 24px 60px rgba(0,0,0,0.5)">
-                <p style="margin:0 0 20px;font-weight:700;font-size:1rem;color:#e8f0ff;font-family:var(--font-display)">Selecciona tu cuenta</p>
-                <div id="_gsi-btn-container" style="display:flex;justify-content:center"></div>
-                <button id="_gsi-cancel" style="margin-top:16px;background:none;border:none;color:rgba(100,130,180,0.65);cursor:pointer;font-size:0.825rem;font-family:var(--font-primary)">Cancelar</button>
+            <div style="background:rgba(10,18,36,0.95);border:1px solid rgba(75,145,255,0.3);border-radius:24px;padding:36px 32px;text-align:center;max-width:340px;width:90%;box-shadow:0 32px 80px rgba(0,0,0,0.6);animation:modalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards">
+                <div style="margin-bottom:20px;display:flex;justify-content:center">
+                     <svg width="40" height="40" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                </div>
+                <p style="margin:0 0 8px;font-weight:700;font-size:1.1rem;color:#e8f0ff;font-family:var(--font-display);letter-spacing:-0.01em">Continúa con Google</p>
+                <p style="margin:0 0 24px;font-size:0.85rem;color:rgba(120, 155, 210, 0.75);line-height:1.4">Accede de forma rápida y segura a tu centro de mando.</p>
+                
+                <div id="_gsi-btn-container" style="display:flex;justify-content:center;min-height:44px;align-items:center">
+                    <div class="loader" style="width:20px;height:20px;border:2px solid rgba(75,145,255,0.2);border-top-color:rgba(75,145,255,0.8);border-radius:50%;animation:spin 0.8s linear infinite"></div>
+                </div>
+
+                <div id="_gsi-error" style="display:none;margin-top:16px;font-size:0.8rem;color:#f87171;background:rgba(239, 68, 68, 0.1);padding:10px;border-radius:10px;border:1px solid rgba(239, 68, 68, 0.2)"></div>
+
+                <button id="_gsi-cancel" style="margin-top:24px;background:none;border:none;color:rgba(120,155,210,0.6);cursor:pointer;font-size:0.875rem;font-family:var(--font-primary);font-weight:600;transition:color 0.2s">Cancelar</button>
             </div>
         `;
         document.body.appendChild(container);
 
         const handleClose = () => {
-            container.remove();
+            container.style.opacity = '0';
+            container.style.transition = 'opacity 0.2s ease';
+            setTimeout(() => container.remove(), 200);
         };
 
-        // Initialize with callback that closes popup and processes credential
-        google.accounts.id.initialize({
-            client_id: getGoogleClientId(),
-            callback: (response) => {
-                handleClose();
-                if (typeof callback === 'function') {
-                    callback(response);
-                }
-            },
-            auto_select: false,
-            cancel_on_tap_outside: false
-        });
+        const tryRender = async () => {
+            const maxWait = 15; // 15 partial seconds
+            let count = 0;
+            
+            while (count < maxWait) {
+                if (window.google?.accounts?.id && _gisReady) {
+                    try {
+                        google.accounts.id.initialize({
+                            client_id: getGoogleClientId(),
+                            callback: (response) => {
+                                handleClose();
+                                if (typeof callback === 'function') callback(response);
+                            },
+                            auto_select: false,
+                            cancel_on_tap_outside: false
+                        });
 
-        // Render the button
-        google.accounts.id.renderButton(document.getElementById('_gsi-btn-container'), {
-            theme: 'outline',
-            size: 'large',
-            text: 'signin_with',
-            width: 240
-        });
+                        const btnContainer = document.getElementById('_gsi-btn-container');
+                        if (btnContainer) {
+                            btnContainer.innerHTML = '';
+                            google.accounts.id.renderButton(btnContainer, {
+                                theme: 'outline',
+                                size: 'large',
+                                text: 'continue_with',
+                                shape: 'pill',
+                                width: 260
+                            });
+                        }
+                        return;
+                    } catch (err) {
+                        console.error('GIS render error:', err);
+                    }
+                }
+                count++;
+                await new Promise(r => setTimeout(r, 600));
+            }
+            
+            // Fail state
+            const btnContainer = document.getElementById('_gsi-btn-container');
+            if (btnContainer) btnContainer.innerHTML = '';
+            const errEl = document.getElementById('_gsi-error');
+            if (errEl) {
+                errEl.textContent = 'No pudimos conectar con Google. Revisa tu conexión o usa otro método.';
+                errEl.style.display = 'block';
+            }
+        };
+
+        tryRender();
 
         container.querySelector('#_gsi-cancel')?.addEventListener('click', handleClose);
         container.addEventListener('click', (e) => {
